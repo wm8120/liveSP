@@ -210,7 +210,8 @@ class MyCPU : public BaseSimpleCPU
     };
     std::map<Addr, InstInfo> instTable;
     m5::hash_map<Addr, std::string> prepareTable;
-    m5::hash_map<Addr, bool> ignoreTable;
+    std::unordered_set<Addr> ignoreSet;
+    //m5::hash_map<Addr, bool> ignoreTable;
     struct BBAttr{
         std::unordered_set<Addr> bbStartSet;
         Addr freq;
@@ -220,6 +221,7 @@ class MyCPU : public BaseSimpleCPU
     std::ostream *synthStream;
     std::ostream *bbFreqStream;
     std::ostream *svcStream;
+    std::ostream *debugStream;
     inline void insertInstTable(Addr a);
 
     const bool dsyscall;

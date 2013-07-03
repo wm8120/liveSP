@@ -15,14 +15,15 @@ int main(int argc, char** argv)
 {
     if(argc < 2)
     {
-        cout<<"usage: codegen [disassembly file]"<<endl;
+        cout<<"usage: codegen [binary]"<<endl;
         return -1;
     }
     //arguments
     uint64_t stack_bottom = 0xbf000000;
-    uint64_t stack_size = 0x00800000;
+    uint64_t stack_size = 0x00001000;
     uint64_t stack_top = stack_bottom - stack_size;
-    system("./arm-objdump -h qsort_small > tmp_objdump");
+    string system_cmd = "./arm-objdump -h " + string(argv[1]) + " > tmp_objdump";
+    system(system_cmd.c_str());
     
     //section header info
     //store data to corresponding structure
@@ -146,6 +147,24 @@ int main(int argc, char** argv)
     }
     secHeader.clear();
     
+    //svc emulation
+    ifstream fre;
+    fre.open("m5out/synth.re", ios::in);
+    uint64_t svclines = 0;
+    uint64_t svgate_addr=0;
+    bool unallocate_svgate = true;
+    synthf << ".section .svgate, \"aw\"" << endl;
+    synthf << ".word 0x4" << endl;
+    svclines++;
+    string reline;
+    while(getline(fre, reline))
+    {
+        svclines++;
+        boost::trim(reline);
+        synthf << ".word 0x" << reline << endl;
+    }
+    uint64_t svc_size = svclines * 4;
+
     //stack and heap
     HeapData hpdata;
     vector<pair<uint32_t, string> >stackData;
@@ -166,9 +185,11 @@ int main(int argc, char** argv)
             hpdata.push_back(make_pair(addr, value_str));
             //cout<<"heap, anonymous or mapping: "<< addr <<endl;
         }
+        //hpdata.push_back(make_pair(addr, value_str));
     }
     splitVec.clear();
     //output heap data
+    uint64_t past_addr;
     auto start_it = hpdata.begin();
     uint64_t start_addr = start_it->first;
     for (auto vec_it = start_it; vec_it != hpdata.end(); vec_it++)
@@ -176,7 +197,7 @@ int main(int argc, char** argv)
         uint64_t addr = vec_it->first;
         if (addr - start_addr <= 0x1000)
         {
-            continue;
+            ;
         }
         else
         {
@@ -187,7 +208,19 @@ int main(int argc, char** argv)
             printData(synthf, start_it, vec_it);
             start_addr = vec_it -> first;
             start_it = vec_it;
+            if (unallocate_svgate && addr - past_addr > svc_size)
+            {
+                svgate_addr = past_addr + 4;
+                linkmap.insert(make_pair(svgate_addr, ".svgate"));
+                unallocate_svgate = false;
+            }
         }
+        past_addr = addr;
+    }
+    if (unallocate_svgate)
+    {
+        cerr << "Too many svc to layout!" << endl;
+        exit(-1);
     }
     sstr.str("");
     sstr << ".heapdata" << hex << start_addr ;
@@ -255,8 +288,10 @@ int main(int argc, char** argv)
 
     if (!instWaitVec.empty())
     {
+        system_cmd = "./arm-objdump -S " + string(argv[1]) + " > tmp_disassembly";
+        system(system_cmd.c_str());
         ifstream dumpf; 
-        dumpf.open(argv[1], ios::in);
+        dumpf.open("tmp_disassembly", ios::in);
         string line;
         for(auto vec_it = instWaitVec.begin(); vec_it != instWaitVec.end(); vec_it++)
         {
@@ -293,6 +328,8 @@ int main(int argc, char** argv)
                 }
             }
         }
+        dumpf.close();
+        system("rm tmp_disassembly");
     }
     instWaitVec.clear();
 
@@ -407,14 +444,6 @@ int main(int argc, char** argv)
     synthf << ".section .misc, \"aw\"" << endl;
     synthf << "max: .word 0x" << hex << modified_bb_freq+1 << endl;
     synthf << "cnt: .word " << hex << 0 << endl;
-    synthf << "svgate: .word 0x4" << endl;
-    ifstream fre;
-    fre.open("m5out/synth.re", ios::in);
-    while(getline(fre, line))
-    {
-        boost::trim(line);
-        synthf << ".word 0x" << line << endl;
-    }
 
     //recovery stack, register and branch to start
     synthf << ".section .console, \"ax\"" << endl;
@@ -457,7 +486,8 @@ int main(int argc, char** argv)
     synthf << "pop {r0, r1, r3, r4}" << endl;
     synthf << "b L" << hex << modified_bb_start+4 << endl;
     synthf << "svc: " << endl;
-    synthf << "ldr r0, =svgate" << endl;
+    synthf << "mov32 r0, 0x" << hex << svgate_addr << endl;
+    //synthf << "ldr r0, =svgate" << endl;
     synthf << "ldr r1, [r0]" << endl;
     synthf << "add ip, r1, r0" << endl;
     synthf << "add r1, r1, #20" << endl;
@@ -503,7 +533,9 @@ void printData(ofstream& fout, MemIter begin, MemIter end)
         {
             auto p = getStride(vec_it1->second);
             fout << p.second << endl;
-            uint64_t delta = vec_it2->first - vec_it1->first - p.first;
+            uint64_t delta = vec_it2->first - vec_it1->first;
+            assert( delta >= p.first );
+            delta -= p.first;
             switch (delta)
             {
                 case 0:
@@ -543,7 +575,7 @@ void printCode(ofstream& fout, CodeIter begin, CodeIter end)
         //if (it1 -> first == entry_pc)
         //    fout << hex << "start: ";
         fout << "L" << hex << it1->first << ": ";
-        if (boost::regex_match(it1->second, syscall))
+        if (boost::regex_search(it1->second, syscall))
         {
             fout << "b Lffff0fe0" << endl;
         }
@@ -556,6 +588,7 @@ void printCode(ofstream& fout, CodeIter begin, CodeIter end)
             fout << it1 -> second << endl;
         }
         uint64_t delta = it2->first - it1->first;
+        assert(delta >= 0);
         for (uint64_t i =0; i < delta/4 - 1; i++)
         {
             fout << "nop" << endl; 
@@ -564,7 +597,18 @@ void printCode(ofstream& fout, CodeIter begin, CodeIter end)
     //if (it1 -> first == entry_pc)
     //    fout << hex << "start: ";
     fout << "L" << hex << it1->first << ": ";
-    fout << it1 -> second << endl;
+    if (boost::regex_search(it1->second, syscall))
+    {
+        fout << "b Lffff0fe0" << endl;
+    }
+    else if (it1->second.find("svc") != string::npos)
+    {
+        fout << "b svc" << endl;
+    }
+    else
+    {
+        fout << it1 -> second << endl;
+    }
 
     fout << endl;
 }

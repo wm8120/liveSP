@@ -73,3 +73,4 @@ class MyCPU(BaseSimpleCPU):
     svc_reg_file = Param.String("synth.re", "Post-SVC register status file")
     syscall_dump = Param.Bool(False, "Dump the syscall")
     syscall_profile_file = Param.String("syscall.gz", "Syscall Dump File")
+    debug_file = Param.String("debug.dump", "File for Debuggin")

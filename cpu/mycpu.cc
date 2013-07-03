@@ -120,6 +120,7 @@ MyCPU::MyCPU(MyCPUParams *p)
       synthStream(NULL),
       bbFreqStream(NULL),
       svcStream(NULL),
+      debugStream(NULL),
       dsyscall(p->syscall_dump),
       syscallStream(NULL),
       simpoint(p->simpoint_profile),
@@ -142,6 +143,7 @@ MyCPU::MyCPU(MyCPUParams *p)
         synthStream = simout.create(p->synthesize_file, false);
         bbFreqStream = simout.create(p->bb_freq_file, false);
         svcStream = simout.create(p->svc_reg_file, false);
+        debugStream = simout.create(p->debug_file, false);
     }
 
     if (dsyscall){
@@ -172,6 +174,9 @@ MyCPU::~MyCPU()
     }
     if (syscallStream) {
         simout.close(syscallStream);
+    }
+    if (debugStream){
+        simout.close(debugStream);    
     }
 }
 
@@ -634,26 +639,24 @@ MyCPU::tick()
                 if (synth)
                 {
                     //arguments
-                    static uint64_t inst_num=1; // number of executed instruction
                     static bool bb_start = false;
-                    //static bool svc_flag = false;
                     static uint64_t r57 =0;
                     //uint64_t stack_bottom = 0xbf000000;
                     //uint64_t stack_size = 0x00800000;
-                    ////static uint64_t inst_start_num=10001;
-                    ////static uint64_t inst_end_num=inst_start_num+simpoint_interval;
-                    //
                     //uint64_t stack_top_limit = stack_bottom - stack_size;
-                    if ( inst_num == inst_start_num-1 ) // skip first N instructions
+
+                    Addr cur_pc = thread->instAddr();
+                    string inst = curStaticInst->disassemble(cur_pc);
+                    if ( numInst == inst_start_num-1 ) // skip first N instructions
                     {
-                        if ( !curStaticInst->isControl() )
+                        if ( !curStaticInst->isControl())
                         {
                             inst_start_num++;
                             inst_end_num++;
                         }
                         else
                         {
-                           // snap the status of all registers
+                            // snap the status of all registers
                             short int i=0;
                             for (i=0; i<16; i++)
                             {
@@ -669,7 +672,7 @@ MyCPU::tick()
                             ///}
                         }
                     }
-                    else if (inst_num == inst_start_num && curStaticInst->isControl())
+                    else if (numInst == inst_start_num && (curStaticInst->isControl() || cur_pc >= 0xffff0000))
                     {
                         // snap the status of all registers
                         short int i=0;
@@ -680,36 +683,41 @@ MyCPU::tick()
                         inst_start_num++;
                         inst_end_num++;
                     }
-                    else if ( (inst_num == inst_start_num && !curStaticInst->isControl()) || \
-                            (inst_num > inst_start_num && inst_num <= inst_end_num + interval_num/10) )
+                    else if ( (numInst == inst_start_num && !curStaticInst->isControl() && cur_pc < 0xffff0000) || \
+                            (numInst > inst_start_num && numInst <= inst_end_num + interval_num/10) )
                     {
-                        Addr cur_pc = thread->instAddr();
-
-                        if (curStaticInst->opClass() == Enums::MemRead)
+                        if (curStaticInst->opClass() == Enums::MemRead && traceData->getAddrValid() && traceData->getDataStatus())
                         {
                             //assert(traceData->getAddrValid());
                             Addr a = traceData->getAddr();
-                            string inst = curStaticInst->disassemble(cur_pc);
                             if (inst.find("ldrd") == string::npos)
                             {
-                                if (ignoreTable.find(a) == ignoreTable.end())
+                                if (ignoreSet.find(a) == ignoreSet.end())
                                 {
                                     stringstream ss;
+                                    int stride;
                                     if (inst.find("b") != string::npos)
                                     {
                                         ss << "B";
+                                        stride = 1;
                                     }
                                     else if (inst.find("h") != string::npos)
                                     {
                                         ss << "H";
+                                        stride = 2;
                                     }
                                     else
                                     {
                                         ss << "W";
+                                        stride = 4;
                                     }
                                     ss << hex << traceData->getIntData();
                                     prepareTable[a] = ss.str();
-                                    ignoreTable[a] = true;
+
+                                    for (int i=0; i<stride; i++)
+                                    {
+                                        ignoreSet.insert(a+i);
+                                    }
                                 }
                             }
                             else
@@ -718,32 +726,64 @@ MyCPU::tick()
                                 uint8_t idx1 = curStaticInst->destRegIdx(1);
                                 uint64_t value0 = thread->readIntReg(idx0);
                                 uint64_t value1 = thread->readIntReg(idx1);
-                                if (ignoreTable.find(a) == ignoreTable.end())
+                                if (ignoreSet.find(a) == ignoreSet.end())
                                 {
                                     stringstream ss;
                                     ss << "W" << hex << value0;
                                     prepareTable[a] = ss.str();
-                                    ignoreTable[a] = true;
+                                    for (int i=0; i<4; i++)
+                                    {
+                                        ignoreSet.insert(a+i);
+                                    }
                                 }
 
                                 a += 4;
-                                if (ignoreTable.find(a) == ignoreTable.end())
+                                if (ignoreSet.find(a) == ignoreSet.end())
                                 {
                                     stringstream ss;
                                     ss << "W" << hex << value1;
                                     prepareTable[a] = ss.str();
-                                    ignoreTable[a] = true;
+                                    for (int i=0; i<4; i++)
+                                    {
+                                        ignoreSet.insert(a+i);
+                                    }
                                 }
                             }
                         }// read
-                        else if (curStaticInst->opClass() == Enums::MemWrite)
+                        else if (curStaticInst->opClass() == Enums::MemWrite && traceData->getAddrValid() && traceData->getDataStatus())
                         {
                             //assert(traceData->getAddrValid());
                             Addr a = traceData->getAddr();
-                            if (ignoreTable.find(a) == ignoreTable.end())
+                            if (ignoreSet.find(a) == ignoreSet.end())
                             {
-                                ignoreTable[a] = true;
+                                stringstream ss;
+                                ss << "B" << 0;
+                                prepareTable[a] = ss.str();
+                                ignoreSet.insert(a);
                             }
+                            //int stride;
+                            //if (inst.find("b") != string::npos)
+                            //{
+                            //    ss << "B";
+                            //    stride = 1;
+                            //}
+                            //else if (inst.find("h") != string::npos)
+                            //{
+                            //    ss << "H";
+                            //    stride = 2;
+                            //}
+                            //else
+                            //{
+                            //    ss << "W";
+                            //    stride = 4;
+                            //}
+                            //ss << hex << traceData->getIntData();
+                            //prepareTable[a] = ss.str();
+
+                            //for (int i=0; i<stride; i++)
+                            //{
+                            //    ignoreSet.insert(a+i);
+                            //}
                         }// write
 
                         if (cur_pc >= 0xffff0000)
@@ -763,9 +803,12 @@ MyCPU::tick()
                         }// >= 0xffff0000
                         else
                         {
-                            if (inst_num == inst_start_num)
+                            if (numInst == inst_start_num)
                             {
                                 start_pc = cur_pc;
+                                *debugStream << numInst << endl;
+                                *debugStream << numOp << endl;
+                                *debugStream << inst;
                             }
 
                             if (curStaticInst->disassemble(cur_pc).find("svc") != string::npos)
@@ -773,7 +816,7 @@ MyCPU::tick()
                                 svc_flag = true;
                             }
 
-                            if (inst_num <= inst_end_num)
+                            if (numInst <= inst_end_num)
                             {
                                 if (bb_start)
                                 {
@@ -784,7 +827,7 @@ MyCPU::tick()
 
                             if (curStaticInst->isControl())
                             {
-                                if (inst_num <= inst_end_num)
+                                if (numInst <= inst_end_num)
                                 {
                                     bb_start = true;
 
@@ -840,7 +883,7 @@ MyCPU::tick()
                             }
                         }// < 0xffff0000
                     }
-                    else if (inst_num > inst_end_num + interval_num/10)
+                    else if (numInst > inst_end_num + interval_num/10)
                     {
                         //recover memory
                         *synthStream<<"memory:";
@@ -893,11 +936,19 @@ MyCPU::tick()
                         Event* evnt = new SimLoopExitEvent("synthesis finished", 0);
                         schedule(evnt, curTick());
                     }
-
-                    if (curStaticInst && (!curStaticInst->isMicroop() || curStaticInst->isLastMicroop())) 
+                    else
                     {
-                        inst_num++;
+                        if (traceData)
+                        {
+                            delete traceData;
+                            traceData = NULL;
+                        }
                     }
+
+                    //if (curStaticInst && (!curStaticInst->isMicroop() || curStaticInst->isLastMicroop())) 
+                    //{
+                    //    inst_num++;
+                    //}
                 }//end of if(synth)
 
                 postExecute();
@@ -1082,6 +1133,15 @@ inline void MyCPU::insertInstTable(Addr a)
                 || str.find("mus") != string::npos\
                 || str.find("mia") != string::npos\
                 )
+        {
+            sstr<<"WaitInst";
+        }
+        else if (str.find("vmrs") != string::npos\
+                || str.find("vmsr") != string::npos)
+        {
+            sstr<<"WaitInst";
+        }
+        else if (str.find("hdr") != string::npos)
         {
             sstr<<"WaitInst";
         }
