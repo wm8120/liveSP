@@ -138,7 +138,15 @@ int main(int argc, char** argv)
             {
                 //uint64_t start_addr = sh_it->dataVec[0].first;//start vma for each data section
                 //cout << hex << start_addr << endl;
-                synthf << ".section " << sh_it->name << endl;            
+                if (sh_it->name.compare(".bss") == 0)
+                {
+                    sh_it->name = ".bs";
+                    synthf << ".section .bs, \"aw\"" << endl;            
+                }
+                else
+                {
+                    synthf << ".section " << sh_it->name << endl;            
+                }
                 uint64_t memaddr = (sh_it->dataVec.begin())->first;
                 linkmap.insert(make_pair(memaddr, sh_it -> name));
                 printData(synthf, sh_it->dataVec.begin(), sh_it->dataVec.end());
