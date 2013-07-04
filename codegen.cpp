@@ -496,9 +496,9 @@ int main(int argc, char** argv)
     synthf << "ldr r1, =cnt" << endl;
     synthf << "ldr r3, [r0]" << endl;
     synthf << "ldr r4, [r1]" << endl;
+    synthf << "add r4, r4, #1" << endl;
     synthf << "cmp r3, r4" << endl;
     synthf << "beq exit" << endl;
-    synthf << "add r4, r4, #1" << endl;
     synthf << "str r4, [r1]" << endl; 
     synthf << "pop {r0, r1, r3, r4}" << endl;
     synthf << "b L" << hex << modified_bb_start+4 << endl;
