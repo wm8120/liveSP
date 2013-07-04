@@ -363,6 +363,15 @@ int main(int argc, char** argv)
     //pc of bb for counting and frequency
     ifstream fbb;
     fbb.open("m5out/synth.bb", ios::in);
+    fbb.seekg(0, fbb.end);
+    size_t fbbsize = fbb.tellg();
+    fbb.seekg(0, fbb.beg);
+    if (fbbsize == 0)
+    {
+        cerr << "no valid basic block for exiting" << endl;
+        exit(-1);
+    }
+
     map<uint64_t, BBInfo> bbAttrMap;
     vector<pair<uint64_t, uint64_t> > freqVec;
     while(getline(fbb, line))

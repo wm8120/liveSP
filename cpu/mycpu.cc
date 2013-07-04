@@ -695,21 +695,45 @@ MyCPU::tick()
                                 if (ignoreSet.find(a) == ignoreSet.end())
                                 {
                                     stringstream ss;
-                                    int stride;
-                                    if (inst.find("b") != string::npos)
+                                    //if (inst.find("b") != string::npos)
+                                    //{
+                                    //    ss << "B";
+                                    //    stride = 1;
+                                    //}
+                                    //else if (inst.find("h") != string::npos)
+                                    //{
+                                    //    ss << "H";
+                                    //    stride = 2;
+                                    //}
+                                    //else
+                                    //{
+                                    //    ss << "W";
+                                    //    stride = 4;
+                                    //}
+                                    int stride = traceData->getDataStatus();
+                                    if (stride == 1)
                                     {
                                         ss << "B";
-                                        stride = 1;
                                     }
-                                    else if (inst.find("h") != string::npos)
+                                    else if (stride == 2)
                                     {
                                         ss << "H";
-                                        stride = 2;
+                                    }
+                                    else if (stride == 3)
+                                    {
+                                        ss << "D";
+                                    }
+                                    else if (stride == 4)
+                                    {
+                                        ss << "W";
+                                    }
+                                    else if (stride == 8)
+                                    {
+                                        ss << "Q";
                                     }
                                     else
                                     {
-                                        ss << "W";
-                                        stride = 4;
+                                        *debugStream << "unknown data stride" << endl;
                                     }
                                     ss << hex << traceData->getIntData();
                                     prepareTable[a] = ss.str();
