@@ -195,6 +195,7 @@ class MyCPU : public BaseSimpleCPU
      */
     const bool synth;
     bool svc_flag;
+    bool bb_simple;
     uint64_t inst_start_num;
     uint64_t inst_end_num;
     uint64_t interval_num;
@@ -202,9 +203,8 @@ class MyCPU : public BaseSimpleCPU
     uint32_t regs[16];
     Addr start_pc;
     Addr bb_start_pc;
-    //Addr last_bb_exit_pc;
     Addr bb_exit_pc;
-    //uint64_t freq_last_bb;
+
     struct InstInfo{
         std::string disassembly;
     };
@@ -216,6 +216,7 @@ class MyCPU : public BaseSimpleCPU
         std::unordered_set<Addr> bbStartSet;
         Addr freq;
         bool showup;
+        bool simple;
     };
     m5::hash_map<Addr, BBAttr> freqTable;
     std::ostream *synthStream;

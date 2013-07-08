@@ -114,6 +114,7 @@ MyCPU::MyCPU(MyCPUParams *p)
       fastmem(p->fastmem),
       synth(p->synthesize),
       svc_flag(false),
+      bb_simple(true),
       inst_start_num(p->synthesize_start),
       inst_end_num(p->synthesize_start+p->synthesize_interval-1),
       interval_num(p->synthesize_interval),
@@ -684,7 +685,7 @@ MyCPU::tick()
                         inst_end_num++;
                     }
                     else if ( (numInst == inst_start_num && !curStaticInst->isControl() && cur_pc < 0xffff0000) || \
-                            (numInst > inst_start_num && numInst <= inst_end_num + interval_num/10) )
+                            (numInst > inst_start_num && numInst <= inst_end_num + interval_num/50) )
                     {
                         if (curStaticInst->opClass() == Enums::MemRead && traceData->getAddrValid() && traceData->getDataStatus())
                         {
@@ -711,6 +712,12 @@ MyCPU::tick()
                                     //    stride = 4;
                                     //}
                                     int stride = traceData->getDataStatus();
+                                    uint64_t data_value = traceData->getIntData();
+                                    //if (a == 0x83a3d)
+                                    //{
+                                    //    *debugStream << "83a3d " << numOp << endl;
+                                    //    *debugStream << traceData->getDataStatus() << " " << traceData->getIntData() << endl;
+                                    //}
                                     if (stride == 1)
                                     {
                                         ss << "B";
@@ -725,7 +732,20 @@ MyCPU::tick()
                                     }
                                     else if (stride == 4)
                                     {
-                                        ss << "W";
+                                        if (inst.find("h") != string::npos && data_value <=0xffff)
+                                        {
+                                            ss << "H";
+                                            stride = 2;
+                                        }
+                                        else if (inst.find("b") != string::npos && data_value <=0xff)
+                                        {
+                                            ss << "B";
+                                            stride = 1;
+                                        }
+                                        else
+                                        {
+                                            ss << "W";
+                                        }
                                     }
                                     else if (stride == 8)
                                     {
@@ -840,13 +860,11 @@ MyCPU::tick()
                                 svc_flag = true;
                             }
 
-                            if (numInst <= inst_end_num)
+                            if (bb_start)
                             {
-                                if (bb_start)
-                                {
-                                    bb_start_pc = cur_pc;
-                                    bb_start = false;
-                                }
+                                bb_start_pc = cur_pc;
+                                bb_start = false;
+                                bb_simple = true;
                             }
 
                             if (curStaticInst->isControl())
@@ -866,8 +884,16 @@ MyCPU::tick()
                                         struct BBAttr bb;
                                         bb.freq=1;
                                         bb.bbStartSet.insert(bb_start_pc);
-                                        freqTable.insert(make_pair(cur_pc, bb));
                                         bb.showup=false;
+                                        if (bb_simple)
+                                        {
+                                            bb.simple = true;
+                                        }
+                                        else
+                                        {
+                                            bb.simple = false;
+                                        }
+                                        freqTable.insert(make_pair(cur_pc, bb));
                                     }
                                 }
                                 else
@@ -877,15 +903,51 @@ MyCPU::tick()
                                     auto itr = freqTable.find(cur_pc);
                                     if ( itr != freqTable.end())
                                     {
-                                        if (inst.find("pc") != string::npos)
+                                        itr->second.showup = true;
+                                    }
+                                    else
+                                    {
+                                        if (bb_simple)
                                         {
-                                            freqTable.erase(itr);
-                                        }
-                                        else
-                                        {
-                                            itr->second.showup = true;
+                                            struct BBAttr bb;
+                                            bb.freq=0;
+                                            bb.bbStartSet.insert(bb_start_pc);
+                                            bb.showup=true;
+                                            bb.simple=true;
+                                            freqTable.insert(make_pair(cur_pc, bb));
                                         }
                                     }
+                                }
+                            }
+                            else
+                            {
+                                if ( cur_pc == 0x1a1ac )
+                                {
+                                    *debugStream << inst << " bb_simple: " << bb_simple << endl;
+                                }
+                                if ( bb_simple && (inst.find("eq") != string::npos || \
+                                        inst.find("ne") != string::npos || \
+                                        inst.find("cs") != string::npos || \
+                                        inst.find("hs") != string::npos || \
+                                        inst.find("cc") != string::npos || \
+                                        inst.find("lo") != string::npos || \
+                                        inst.find("mi") != string::npos || \
+                                        inst.find("pl") != string::npos || \
+                                        inst.find("vs") != string::npos || \
+                                        inst.find("vc") != string::npos || \
+                                        inst.find("hi") != string::npos || \
+                                        inst.find("ls") != string::npos || \
+                                        inst.find("ge") != string::npos || \
+                                        inst.find("lt") != string::npos || \
+                                        inst.find("gt") != string::npos || \
+                                        inst.find("le") != string::npos || \
+                                        inst.find("pc") != string::npos ))
+                                {
+                                    if ( cur_pc == 0x1a1ac )
+                                    {
+                                        *debugStream << "fall in" << endl;
+                                    }
+                                    bb_simple = false;
                                 }
                             }
 
@@ -907,7 +969,7 @@ MyCPU::tick()
                             }
                         }// < 0xffff0000
                     }
-                    else if (numInst > inst_end_num + interval_num/10)
+                    else if (numInst > inst_end_num + interval_num/50)
                     {
                         //recover memory
                         *synthStream<<"memory:";
@@ -951,7 +1013,7 @@ MyCPU::tick()
                         {
                             BBAttr& bb = it->second;
                             unordered_set<Addr>& set = bb.bbStartSet;
-                            if (set.size() == 1 && bb.showup && *(set.begin()) != it->first)
+                            if (set.size() == 1 && bb.simple && bb.showup && *(set.begin()) != it->first)
                             {
                                 *bbFreqStream << hex << it->first << " " << hex << *(set.begin()) << " " << bb.freq << endl;
                             }
