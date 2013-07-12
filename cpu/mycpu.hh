@@ -224,6 +224,7 @@ class MyCPU : public BaseSimpleCPU
     std::ostream *svcStream;
     std::ostream *debugStream;
     inline void insertInstTable(Addr a);
+    inline void prepareData(Addr a, uint64_t data, int stride);
 
     const bool dsyscall;
     std::ostream *syscallStream;

@@ -18,7 +18,8 @@ void printCode(std::ofstream& fout, CodeIter begin, CodeIter end);
 void printLinker(std::ofstream& lout, std::map<uint64_t, std::string>& lmap, uint64_t entry_pc);
 
 typedef enum{BYTE=1, HALFWORD=2, WORD=4} Stride_t;
-inline std::pair<Stride_t, std::string>  getStride(std::string str);
+inline std::pair<Stride_t, std::string>  getStride(const std::string &str);
+inline Stride_t getStride(const CodeIter &it);
 
 struct BBInfo{
     uint64_t bb_start_pc;

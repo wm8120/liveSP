@@ -605,8 +605,14 @@ void printCode(ofstream& fout, CodeIter begin, CodeIter end)
             fout << it1 -> second << endl;
         }
         uint64_t delta = it2->first - it1->first;
-        assert(delta >= 0);
-        for (uint64_t i =0; i < delta/4 - 1; i++)
+        Stride_t stride = getStride(it1);
+        assert (delta >= stride);
+        delta -= stride;
+        for (int i=0; i<delta%4; i++)
+        {
+            fout << ".byte 0" << endl;
+        }
+        for (uint64_t i =0; i < delta/4; i++)
         {
             fout << "nop" << endl; 
         }
@@ -646,7 +652,7 @@ void printLinker(ofstream& lout, map<uint64_t, string>& lmap, uint64_t entry_pc)
     lout << "}" << endl;
 }
 
-inline pair<Stride_t, std::string>  getStride(string str)
+inline pair<Stride_t, std::string>  getStride(const string &str)
 {
     Stride_t stride;
     string data;
@@ -667,9 +673,32 @@ inline pair<Stride_t, std::string>  getStride(string str)
     }
     else
     {
-        cerr << "wrong data format" << endl; 
+        cerr << "wrong data format: " << str << endl; 
         exit(-1);
     }
     data += str.substr(1);
     return make_pair(stride, data);
+}
+
+inline Stride_t getStride(const CodeIter &it)
+{
+    Stride_t stride;
+    string str = it->second;
+    if (str.find("byte") != string::npos)
+    {
+        stride = BYTE;
+    }
+    else if (str.find("hword") != string::npos)
+    {
+        stride = HALFWORD;
+    }
+    else if (str.find("word") != string::npos)
+    {
+        stride = WORD;
+    }
+    else
+    {
+        stride = WORD;
+    }
+    return stride;
 }

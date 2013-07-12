@@ -685,7 +685,7 @@ MyCPU::tick()
                         inst_end_num++;
                     }
                     else if ( (numInst == inst_start_num && !curStaticInst->isControl() && cur_pc < 0xffff0000) || \
-                            (numInst > inst_start_num && numInst <= inst_end_num + interval_num/50) )
+                            (numInst > inst_start_num && numInst <= inst_end_num + interval_num/2) )
                     {
                         if (curStaticInst->opClass() == Enums::MemRead && traceData->getAddrValid() && traceData->getDataStatus())
                         {
@@ -693,76 +693,85 @@ MyCPU::tick()
                             Addr a = traceData->getAddr();
                             if (inst.find("ldrd") == string::npos)
                             {
-                                if (ignoreSet.find(a) == ignoreSet.end())
+                                int stride = traceData->getDataStatus();
+                                uint64_t data_value = traceData->getIntData();
+                                if (stride == 4)
                                 {
-                                    stringstream ss;
-                                    //if (inst.find("b") != string::npos)
-                                    //{
-                                    //    ss << "B";
-                                    //    stride = 1;
-                                    //}
-                                    //else if (inst.find("h") != string::npos)
-                                    //{
-                                    //    ss << "H";
-                                    //    stride = 2;
-                                    //}
-                                    //else
-                                    //{
-                                    //    ss << "W";
-                                    //    stride = 4;
-                                    //}
-                                    int stride = traceData->getDataStatus();
-                                    uint64_t data_value = traceData->getIntData();
-                                    //if (a == 0x83a3d)
-                                    //{
-                                    //    *debugStream << "83a3d " << numOp << endl;
-                                    //    *debugStream << traceData->getDataStatus() << " " << traceData->getIntData() << endl;
-                                    //}
-                                    if (stride == 1)
+                                    if (inst.find("h") != string::npos && data_value <=0xffff)
                                     {
-                                        ss << "B";
+                                        stride = 2;
                                     }
-                                    else if (stride == 2)
+                                    else if (inst.find("b") != string::npos && data_value <=0xff)
                                     {
-                                        ss << "H";
-                                    }
-                                    else if (stride == 3)
-                                    {
-                                        ss << "D";
-                                    }
-                                    else if (stride == 4)
-                                    {
-                                        if (inst.find("h") != string::npos && data_value <=0xffff)
-                                        {
-                                            ss << "H";
-                                            stride = 2;
-                                        }
-                                        else if (inst.find("b") != string::npos && data_value <=0xff)
-                                        {
-                                            ss << "B";
-                                            stride = 1;
-                                        }
-                                        else
-                                        {
-                                            ss << "W";
-                                        }
-                                    }
-                                    else if (stride == 8)
-                                    {
-                                        ss << "Q";
-                                    }
-                                    else
-                                    {
-                                        *debugStream << "unknown data stride" << endl;
-                                    }
-                                    ss << hex << traceData->getIntData();
-                                    prepareTable[a] = ss.str();
-
-                                    for (int i=0; i<stride; i++)
-                                    {
-                                        ignoreSet.insert(a+i);
+                                        stride = 1;
                                     }
                                 }
+                                prepareData(a, data_value, stride);
+                                ///if (ignoreSet.find(a) == ignoreSet.end())
+                                ///{
+                                ///    stringstream ss;
+                                ///    //if (inst.find("b") != string::npos)
+                                ///    //{
+                                ///    //    ss << "B";
+                                ///    //    stride = 1;
+                                ///    //}
+                                ///    //else if (inst.find("h") != string::npos)
+                                ///    //{
+                                ///    //    ss << "H";
+                                ///    //    stride = 2;
+                                ///    //}
+                                ///    //else
+                                ///    //{
+                                ///    //    ss << "W";
+                                ///    //    stride = 4;
+                                ///    //}
+                                ///    int stride = traceData->getDataStatus();
+                                ///    uint64_t data_value = traceData->getIntData();
+                                ///    if (stride == 1)
+                                ///    {
+                                ///        ss << "B";
+                                ///    }
+                                ///    else if (stride == 2)
+                                ///    {
+                                ///        ss << "H";
+                                ///    }
+                                ///    else if (stride == 3)
+                                ///    {
+                                ///        ss << "D";
+                                ///    }
+                                ///    else if (stride == 4)
+                                ///    {
+                                ///        if (inst.find("h") != string::npos && data_value <=0xffff)
+                                ///        {
+                                ///            ss << "H";
+                                ///            stride = 2;
+                                ///        }
+                                ///        else if (inst.find("b") != string::npos && data_value <=0xff)
+                                ///        {
+                                ///            ss << "B";
+                                ///            stride = 1;
+                                ///        }
+                                ///        else
+                                ///        {
+                                ///            ss << "W";
+                                ///        }
+                                ///    }
+                                ///    else if (stride == 8)
+                                ///    {
+                                ///        ss << "Q";
+                                ///    }
+                                ///    else
+                                ///    {
+                                ///        *debugStream << "unknown data stride" << endl;
+                                ///    }
+                                ///    ss << hex << traceData->getIntData();
+                                ///    prepareTable[a] = ss.str();
+
+                                ///    for (int i=0; i<stride; i++)
+                                ///    {
+                                ///        ignoreSet.insert(a+i);
+                                ///    }
+                                ///}
                             }
                             else
                             {
@@ -770,28 +779,30 @@ MyCPU::tick()
                                 uint8_t idx1 = curStaticInst->destRegIdx(1);
                                 uint64_t value0 = thread->readIntReg(idx0);
                                 uint64_t value1 = thread->readIntReg(idx1);
-                                if (ignoreSet.find(a) == ignoreSet.end())
-                                {
-                                    stringstream ss;
-                                    ss << "W" << hex << value0;
-                                    prepareTable[a] = ss.str();
-                                    for (int i=0; i<4; i++)
-                                    {
-                                        ignoreSet.insert(a+i);
-                                    }
-                                }
+                                //if (ignoreSet.find(a) == ignoreSet.end())
+                                //{
+                                //    stringstream ss;
+                                //    ss << "W" << hex << value0;
+                                //    prepareTable[a] = ss.str();
+                                //    for (int i=0; i<4; i++)
+                                //    {
+                                //        ignoreSet.insert(a+i);
+                                //    }
+                                //}
 
-                                a += 4;
-                                if (ignoreSet.find(a) == ignoreSet.end())
-                                {
-                                    stringstream ss;
-                                    ss << "W" << hex << value1;
-                                    prepareTable[a] = ss.str();
-                                    for (int i=0; i<4; i++)
-                                    {
-                                        ignoreSet.insert(a+i);
-                                    }
-                                }
+                                //a += 4;
+                                //if (ignoreSet.find(a) == ignoreSet.end())
+                                //{
+                                //    stringstream ss;
+                                //    ss << "W" << hex << value1;
+                                //    prepareTable[a] = ss.str();
+                                //    for (int i=0; i<4; i++)
+                                //    {
+                                //        ignoreSet.insert(a+i);
+                                //    }
+                                //}
+                                prepareData(a, value0, 4);
+                                prepareData(a+4, value1, 4);
                             }
                         }// read
                         else if (curStaticInst->opClass() == Enums::MemWrite && traceData->getAddrValid() && traceData->getDataStatus())
@@ -869,6 +880,11 @@ MyCPU::tick()
 
                             if (curStaticInst->isControl())
                             {
+                                if (bb_simple && inst.find("pc") != string::npos)
+                                {
+                                    bb_simple = false;
+                                }
+
                                 if (numInst <= inst_end_num)
                                 {
                                     bb_start = true;
@@ -921,10 +937,10 @@ MyCPU::tick()
                             }
                             else
                             {
-                                if ( cur_pc == 0x1a1ac )
-                                {
-                                    *debugStream << inst << " bb_simple: " << bb_simple << endl;
-                                }
+                                //if ( cur_pc == 0x1a1ac )
+                                //{
+                                //    *debugStream << inst << " bb_simple: " << bb_simple << endl;
+                                //}
                                 if ( bb_simple && (inst.find("eq") != string::npos || \
                                         inst.find("ne") != string::npos || \
                                         inst.find("cs") != string::npos || \
@@ -943,7 +959,7 @@ MyCPU::tick()
                                         inst.find("le") != string::npos || \
                                         inst.find("pc") != string::npos ))
                                 {
-                                    if ( cur_pc == 0x1a1ac )
+                                    if ( cur_pc == 0x14294 )
                                     {
                                         *debugStream << "fall in" << endl;
                                     }
@@ -969,7 +985,7 @@ MyCPU::tick()
                             }
                         }// < 0xffff0000
                     }
-                    else if (numInst > inst_end_num + interval_num/50)
+                    else if (numInst > inst_end_num + interval_num/2)
                     {
                         //recover memory
                         *synthStream<<"memory:";
@@ -1241,6 +1257,25 @@ inline void MyCPU::insertInstTable(Addr a)
     instTable.insert(std::make_pair(a, iinfo));
 }
 
+inline void MyCPU::prepareData(Addr a, uint64_t data, int stride)
+{
+    bool insert = false;
+    unsigned short byte;
+    stringstream ss;
+    for (int i=0; i<stride; i++)
+    {
+        //pair<unordered_set<Addr>::iterator, bool> p = ignoreSet.insert(a+i);
+        auto p = ignoreSet.insert(a+i);
+        insert = p.second;
+        if (insert)
+        {
+            ss.str("");
+            byte = (data >> i*8) & 0x00000000000000ff;
+            ss << "B" << hex << byte;
+            prepareTable.insert(make_pair(a+i, ss.str()));
+        }
+    }
+}
 ////////////////////////////////////////////////////////////////////////
 //
 //  MyCPU Simulation Object

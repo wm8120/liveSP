@@ -49,6 +49,12 @@ if __name__ == '__main__':
     branch_tt = re.findall('(?<=system.cpu.branchPred.condPredicted)\s*\d+(?=\s*#.*)', mm);
     print 'branch total prediction: ', branch_tt;
     
+    l2mi = re.findall('(?<=system.l2.overall_miss_rate::cpu.inst)'+common, mm);
+    print 'l2 inst miss rate: ', l2mi;
+    l2md = re.findall('(?<=system.l2.overall_miss_rate::cpu.data)'+common, mm);
+    print 'l2 data miss rate: ', l2md;
+    l2mtt = re.findall('(?<=system.l2.overall_miss_rate::total)'+common, mm);
+    print 'l2 total miss rate: ', l2md;
     exit(0);
 
 
