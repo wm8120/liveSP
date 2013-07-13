@@ -410,10 +410,28 @@ int main(int argc, char** argv)
                 break;
             }
         }
+        else
+        {
+            auto p = instMap.insert(make_pair(in_it->first+8, "nop"));
+            assert(p.second);
+            in_next_it = p.first;
+            modified_bb_start = bm_it->second.bb_start_pc;
+            modified_bb_exit = in_it->first;
+            modified_bb_freq = bm_it->second.freq;
+            modified_bb_next = in_next_it->first;
+            break;
+        }
     }
     if (fv_it == freqVec.end())
     {
         cerr << "The code layout too dense to synthesize." << endl;
+        ofstream debugfile;
+        debugfile.open("debugfile.log", ios::out);
+        for (auto it=instMap.begin(); it!=instMap.end(); it++)
+        {
+            debugfile << hex << it->first << ": " << it->second << endl;
+        }
+        debugfile.close();
         exit(-1);
     }
 

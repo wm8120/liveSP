@@ -4,7 +4,7 @@
 BINARY=qsort_large
 ARGS="input_large.dat"
 INTERVAL=1000000
-INTERVAL_NO=512
+INTERVAL_NO=421
 START=$(( INTERVAL*INTERVAL_NO ))
 
 GEM5=/home/wm/gem5_new
