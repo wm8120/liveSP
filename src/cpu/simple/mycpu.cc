@@ -607,7 +607,6 @@ MyCPU::tick()
                         if (syscall_begin == false)
                         {
                             syscall_begin = true;
-                            //*syscallStream << endl;
                             *syscallStream << instpre << endl;
                         }
                         *syscallStream << "0x" << hex << pc << " : " << curStaticInst->disassemble(pc) << " : ";
@@ -664,13 +663,6 @@ MyCPU::tick()
                                 regs[i]=thread->readIntReg(i);
                             }
                             bb_start = true;
-                            //last_bb_pc = 0;
-                            //last_bb_exit_pc = 0;
-                            //freq_last_bb = 0;
-                            ///for (i=0; i<16; i++)
-                            ///{
-                            ///    cout<<hex<<regs[i]<<endl;
-                            ///}
                         }
                     }
                     else if (numInst == inst_start_num && (curStaticInst->isControl() || cur_pc >= 0xffff0000))
@@ -686,7 +678,6 @@ MyCPU::tick()
                     }
                     else if ( (numInst == inst_start_num && !curStaticInst->isControl() && cur_pc < 0xffff0000) || \
                             (numInst > inst_start_num) )
-                            //(numInst > inst_start_num && numInst <= inst_end_num + interval_num/2) )
                     {
                         if (curStaticInst->opClass() == Enums::MemRead && traceData->getAddrValid() && traceData->getDataStatus())
                         {
@@ -708,71 +699,6 @@ MyCPU::tick()
                                     }
                                 }
                                 prepareData(a, data_value, stride);
-                                ///if (ignoreSet.find(a) == ignoreSet.end())
-                                ///{
-                                ///    stringstream ss;
-                                ///    //if (inst.find("b") != string::npos)
-                                ///    //{
-                                ///    //    ss << "B";
-                                ///    //    stride = 1;
-                                ///    //}
-                                ///    //else if (inst.find("h") != string::npos)
-                                ///    //{
-                                ///    //    ss << "H";
-                                ///    //    stride = 2;
-                                ///    //}
-                                ///    //else
-                                ///    //{
-                                ///    //    ss << "W";
-                                ///    //    stride = 4;
-                                ///    //}
-                                ///    int stride = traceData->getDataStatus();
-                                ///    uint64_t data_value = traceData->getIntData();
-                                ///    if (stride == 1)
-                                ///    {
-                                ///        ss << "B";
-                                ///    }
-                                ///    else if (stride == 2)
-                                ///    {
-                                ///        ss << "H";
-                                ///    }
-                                ///    else if (stride == 3)
-                                ///    {
-                                ///        ss << "D";
-                                ///    }
-                                ///    else if (stride == 4)
-                                ///    {
-                                ///        if (inst.find("h") != string::npos && data_value <=0xffff)
-                                ///        {
-                                ///            ss << "H";
-                                ///            stride = 2;
-                                ///        }
-                                ///        else if (inst.find("b") != string::npos && data_value <=0xff)
-                                ///        {
-                                ///            ss << "B";
-                                ///            stride = 1;
-                                ///        }
-                                ///        else
-                                ///        {
-                                ///            ss << "W";
-                                ///        }
-                                ///    }
-                                ///    else if (stride == 8)
-                                ///    {
-                                ///        ss << "Q";
-                                ///    }
-                                ///    else
-                                ///    {
-                                ///        *debugStream << "unknown data stride" << endl;
-                                ///    }
-                                ///    ss << hex << traceData->getIntData();
-                                ///    prepareTable[a] = ss.str();
-
-                                ///    for (int i=0; i<stride; i++)
-                                ///    {
-                                ///        ignoreSet.insert(a+i);
-                                ///    }
-                                ///}
                             }
                             else
                             {
@@ -780,28 +706,6 @@ MyCPU::tick()
                                 uint8_t idx1 = curStaticInst->destRegIdx(1);
                                 uint64_t value0 = thread->readIntReg(idx0);
                                 uint64_t value1 = thread->readIntReg(idx1);
-                                //if (ignoreSet.find(a) == ignoreSet.end())
-                                //{
-                                //    stringstream ss;
-                                //    ss << "W" << hex << value0;
-                                //    prepareTable[a] = ss.str();
-                                //    for (int i=0; i<4; i++)
-                                //    {
-                                //        ignoreSet.insert(a+i);
-                                //    }
-                                //}
-
-                                //a += 4;
-                                //if (ignoreSet.find(a) == ignoreSet.end())
-                                //{
-                                //    stringstream ss;
-                                //    ss << "W" << hex << value1;
-                                //    prepareTable[a] = ss.str();
-                                //    for (int i=0; i<4; i++)
-                                //    {
-                                //        ignoreSet.insert(a+i);
-                                //    }
-                                //}
                                 prepareData(a, value0, 4);
                                 prepareData(a+4, value1, 4);
                             }
@@ -817,29 +721,6 @@ MyCPU::tick()
                                 prepareTable[a] = ss.str();
                                 ignoreSet.insert(a);
                             }
-                            //int stride;
-                            //if (inst.find("b") != string::npos)
-                            //{
-                            //    ss << "B";
-                            //    stride = 1;
-                            //}
-                            //else if (inst.find("h") != string::npos)
-                            //{
-                            //    ss << "H";
-                            //    stride = 2;
-                            //}
-                            //else
-                            //{
-                            //    ss << "W";
-                            //    stride = 4;
-                            //}
-                            //ss << hex << traceData->getIntData();
-                            //prepareTable[a] = ss.str();
-
-                            //for (int i=0; i<stride; i++)
-                            //{
-                            //    ignoreSet.insert(a+i);
-                            //}
                         }// write
 
                         if (cur_pc >= 0xffff0000)
@@ -938,10 +819,6 @@ MyCPU::tick()
                             }
                             else
                             {
-                                //if ( cur_pc == 0x1a1ac )
-                                //{
-                                //    *debugStream << inst << " bb_simple: " << bb_simple << endl;
-                                //}
                                 if ( bb_simple && (inst.find("eq") != string::npos || \
                                         inst.find("ne") != string::npos || \
                                         inst.find("cs") != string::npos || \
@@ -1047,11 +924,6 @@ MyCPU::tick()
                             traceData = NULL;
                         }
                     }
-
-                    //if (curStaticInst && (!curStaticInst->isMicroop() || curStaticInst->isLastMicroop())) 
-                    //{
-                    //    inst_num++;
-                    //}
                 }//end of if(synth)
 
                 postExecute();

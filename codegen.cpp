@@ -49,11 +49,6 @@ int main(int argc, char** argv)
             boost::trim(str);
             info.attr = str;
             secHeader.push_back(info);
-            
-            //cout << "name" << info.name
-            //    << "size" << info.size
-            //    << "attribute" << info.attr
-            //    << "VMA" << pc << endl;
         }
     }
 
@@ -136,8 +131,6 @@ int main(int argc, char** argv)
             }
             else
             {
-                //uint64_t start_addr = sh_it->dataVec[0].first;//start vma for each data section
-                //cout << hex << start_addr << endl;
                 if (sh_it->name.compare(".bss") == 0)
                 {
                     sh_it->name = ".bs";
@@ -191,9 +184,7 @@ int main(int argc, char** argv)
         else
         {
             hpdata.push_back(make_pair(addr, value_str));
-            //cout<<"heap, anonymous or mapping: "<< addr <<endl;
         }
-        //hpdata.push_back(make_pair(addr, value_str));
     }
     splitVec.clear();
     //output heap data
@@ -288,12 +279,6 @@ int main(int argc, char** argv)
         }
     }
 
-    //debug
-    //for (auto it=instWaitVec.begin(); it != instWaitVec.end(); it++)
-    //{
-    //    cout << *it << endl;
-    //}
-
     if (!instWaitVec.empty())
     {
         system_cmd = "./arm-objdump -S " + string(argv[1]) + " > tmp_disassembly";
@@ -303,7 +288,6 @@ int main(int argc, char** argv)
         string line;
         for(auto vec_it = instWaitVec.begin(); vec_it != instWaitVec.end(); vec_it++)
         {
-            //string patter_str="(?<=" + *vec_it + ":[ \t]+[0-9a-f]{8}).*(?=($|\\<.*$))";
             stringstream ress;
             ress << "\\s*" << hex << *vec_it << ":";
             boost::regex pattern(ress.str());
@@ -327,8 +311,6 @@ int main(int argc, char** argv)
                         line = line.substr(0, pos);
                     }
                     boost::trim(line);
-                    //debug
-                    //cout << hex << pc << " " << line << endl;
 
                     instMap.insert(make_pair(pc, line));
 
@@ -341,11 +323,6 @@ int main(int argc, char** argv)
     }
     instWaitVec.clear();
 
-    //debug
-    //for (auto it = instMap.begin(); it != instMap.end(); it++)
-    //{
-    //    cout << hex << it->first << " " << it->second << endl;
-    //}
     // seperate 0xffffxxxx instruction from instMap
     map<uint64_t, string> sysInst;
     if (instMap.find(0xffff0fe0) != instMap.end())
@@ -607,8 +584,6 @@ void printCode(ofstream& fout, CodeIter begin, CodeIter end)
     boost::regex syscall("sub\\s*pc,\\s*r0,\\s*#31");
     for (;it2 != end; it1++, it2++)
     {
-        //if (it1 -> first == entry_pc)
-        //    fout << hex << "start: ";
         fout << "L" << hex << it1->first << ": ";
         if (boost::regex_search(it1->second, syscall))
         {
@@ -635,8 +610,6 @@ void printCode(ofstream& fout, CodeIter begin, CodeIter end)
             fout << "nop" << endl; 
         }
     }
-    //if (it1 -> first == entry_pc)
-    //    fout << hex << "start: ";
     fout << "L" << hex << it1->first << ": ";
     if (boost::regex_search(it1->second, syscall))
     {
@@ -658,7 +631,6 @@ void printLinker(ofstream& lout, map<uint64_t, string>& lmap, uint64_t entry_pc)
 {
     lout << "SECTIONS" << endl;
     lout << "{" << endl;
-    //lout << "\tENTRY(L" << hex << entry_pc << ")" << endl;
     lout << "\tENTRY(start)" << endl;
     lout << "\t.misc : {*(.misc)}\n" << endl;
     lout << "\t.console : {*(.console)}" << endl;
