@@ -77,6 +77,15 @@ DetailTrace::DetailTrace(string s)
             }
         }
     }
+
+    if (hlt_exception)
+    {
+        assert(splitVec.size() == 4);
+        string reg_change = boost::to_lower_copy(splitVec[3]);
+        StrVec strs;
+        boost::split(strs, reg_change, boost::is_any_of(","));
+        new_x0 = strs[1];
+    }
 }
 
 string DetailTrace::disassembly()
@@ -91,6 +100,8 @@ void DetailTrace::interpret_opcode()
     boost::regex store_pattern("^st");
     boost::regex prefetch_pattern("^prf");
     boost::regex div_pattern("^(s|u|f)div");
+    boost::regex hlt_pattern("^hlt");
+    boost::regex not_simple("eq|ne|cs|hs|cc|lo|mi|pl|vs|vc|hi|ls|ge|lt|gt|le|al|nv");
     if (boost::regex_search(s, load_pattern))
     {
         mem_load = true;
@@ -107,6 +118,15 @@ void DetailTrace::interpret_opcode()
     {
         division = true;
     }
+    else if (boost::regex_search(s, hlt_pattern))
+    {
+        hlt_exception = true;
+    }
+
+    if (boost::regex_search(s, not_simple))
+    {
+        simple = false;
+    }
 }
 
 void DetailTrace::init()
@@ -120,6 +140,9 @@ void DetailTrace::init()
     mem_store = false;
     prefetch = false;
     division = false;
+    hlt_exception = false;
+    simple = true;
+    new_x0 = "";
 }
 
 Addr DetailTrace::get_target_pc()
@@ -167,3 +190,17 @@ bool DetailTrace::is_division()
     return division;
 }
 
+string& DetailTrace::get_x0()
+{
+    return new_x0;
+}
+
+bool DetailTrace::is_hlt()
+{
+    return hlt_exception;
+}
+
+bool DetailTrace::is_simple()
+{
+    return simple;
+}

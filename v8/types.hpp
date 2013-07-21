@@ -8,12 +8,18 @@
 #include <string>
 #include <map>
 #include <set>
+#include <list>
 
 typedef std::uint64_t Addr;
 typedef std::pair<Addr, Addr> BasicBlockRange;
 typedef std::vector<std::string> StrVec;
 typedef std::map<Addr, std::string> PcStrMap;
 typedef PcStrMap::iterator PcStrIter;
+typedef struct{
+    std::string x0;
+    std::string ret_pc;
+} HLTData;
+typedef std::list<HLTData> HLTList;
 
 typedef enum { ZERO = 0, BYTE = 1, HALFWORD = 2, WORD = 4, QUAD = 8} DataStride;
 typedef struct{
@@ -27,6 +33,7 @@ typedef struct{
     Addr freq;
 } BBStat;
 typedef std::map<Addr, BBStat> PcBBMap;
+typedef std::pair<Addr, PcBBMap::iterator> ExitBBPair;
 
 struct BBInfo
 {

@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <sstream>
 #include <boost/algorithm/string.hpp>
+#include <algorithm>
 
 using namespace std;
 
@@ -17,8 +18,14 @@ void printOneValue(fstream& fout, RWData& data);
 void insertInstTable(PcStrMap& instTable, DetailTrace& dtrace, unordered_set<Addr>& WTlist);
 void printCode(fstream& fout, PcStrIter begin, PcStrIter end);
 
+bool pcompare(const ExitBBPair& first, const ExitBBPair& second)
+{
+    return first.first < second.first;
+}
+
 int main(int argc, char** argv)
 {
+    const Addr interval = 50000;
     //parse status.txt
     string oneline;
     fstream fcfg;
@@ -50,6 +57,7 @@ int main(int argc, char** argv)
     fcfg.close();
     
     bool bb_start=true;
+    bool bb_simple=true;
     Addr start_pc=0;//the pc of first instruction in trace
     Addr cur_bb_startpc;
     //Addr last_bb_start_pc=0;//the pc of first inst of last bb
@@ -62,6 +70,11 @@ int main(int argc, char** argv)
     map<Addr, string> instTable;
     unordered_set<Addr> WTlist; //list of "WaitTarget" instruction
     PcBBMap bbMap;
+    HLTList hdataList;
+    vector<ExitBBPair> exitBBs;
+
+    bool isHLT = false;
+    HLTData hdata;
     for(Addr i=0; getline(cin, oneline); i++)
     {
         DetailTrace dtrace(oneline);
@@ -70,40 +83,69 @@ int main(int argc, char** argv)
         {
             start_pc = cur_pc;
         }
+
         if (bb_start)
         {
             cur_bb_startpc = cur_pc;
-            //if (cur_pc > last_bb_start_pc)
-            //{
-            //    last_bb_start_pc = cur_pc;
-            //}
             bb_start = false;
         }
+
         if (dtrace.is_control())
         {
             auto it = bbMap.find(cur_pc);
-            if (it != bbMap.end())
+            if (i<interval)
             {
-                it->second.startpcList.insert(cur_bb_startpc);
-                it->second.freq++;
+                if (it != bbMap.end())
+                {
+                    it->second.startpcList.insert(cur_bb_startpc);
+                    it->second.freq++;
+                }
+                else
+                {
+                    BBStat bbstat;
+                    bbstat.startpcList.insert(cur_bb_startpc);
+                    bbstat.freq = 1;
+                    bbMap.insert(make_pair(cur_pc, bbstat));
+                }
             }
             else
             {
-                BBStat bbstat;
-                bbstat.startpcList.insert(cur_bb_startpc);
-                bbstat.freq = 1;
-                bbMap.insert(make_pair(cur_pc, bbstat));
+                if (bb_simple)
+                {
+                    if (it == bbMap.end())
+                    {
+                        BBStat bbstat;
+                        bbstat.startpcList.insert(cur_bb_startpc);
+                        bbstat.freq = 0;
+                        auto p = bbMap.insert(make_pair(cur_pc, bbstat));
+                        it = p.first;
+                    }
+                    exitBBs.push_back(make_pair(it->second.freq, it));
+                }
             }
             bb_start = true;
-            //if (cur_pc > last_bb_exit_pc)
-            //{
-            //    last_bb_exit_pc = cur_pc;
-            //    last_bb_freq=1;
-            //}
-            //else if (cur_pc == last_bb_exit_pc)
-            //{
-            //    last_bb_freq++;
-            //}
+            bb_simple = true;
+        }
+        else
+        {
+            if(bb_simple && !dtrace.is_simple())
+            {
+                bb_simple = false;
+            }
+        }
+
+        if (isHLT)
+        {
+            stringstream ss;
+            ss << hex << "0x" << cur_pc;
+            hdata.ret_pc = ss.str();
+            hdataList.push_back(hdata);
+            isHLT = false;
+        }
+        if (dtrace.is_hlt())
+        {
+            isHLT = true;
+            hdata.x0 = dtrace.get_x0();
         }
 
         Addr maddr = dtrace.get_rw_addr();
@@ -118,11 +160,30 @@ int main(int argc, char** argv)
             auto it = datas.begin();
             for (;it != datas.end(); it++)
             {
-                if (ignoreList.find(maddr) == ignoreList.end())
+                for (int i=0; i<stride; i++)
                 {
-                    ignoreList.insert(maddr);
+                    if (ignoreList.find(maddr) == ignoreList.end())
+                    {
+                        RWData rwd;
+                        rwd.stride = BYTE;
+                        rwd.data_str = "0";
+                        if ( maddr < stack_base - stack_limit)
+                        {
+                            prepareTable.insert(make_pair(maddr, rwd));
+                        }
+                        else if (maddr >= stack_base - stack_limit && maddr < stack_base)
+                        {
+                            stackTable.insert(make_pair(maddr, rwd));        
+                        }
+                        else
+                        {
+                            cerr << "memory usage mismatch configuration" << endl;
+                            exit(-1);
+                        }
+                        ignoreList.insert(maddr);
+                    }
+                    maddr++;
                 }
-                maddr += stride;
             }
         }
         if (dtrace.is_mem_ld())
@@ -130,27 +191,36 @@ int main(int argc, char** argv)
             auto it = datas.begin();
             for (;it != datas.end(); it++)
             {
-                if (ignoreList.find(maddr) == ignoreList.end())
+                for (int i=0; i<stride; i++)
                 {
-                    RWData rwd;
-                    rwd.stride = stride;
-                    rwd.data_str = *it;
-                    if ( maddr < stack_base - stack_limit)
+                    if (ignoreList.find(maddr) == ignoreList.end())
                     {
-                        prepareTable.insert(make_pair(maddr, rwd));
+                        string byte = "0x";
+                        string onedata(*it);
+                        size_t len = onedata.length();
+                        byte.push_back(onedata[len-2-2*i]);
+                        byte.push_back(onedata[len-1-2*i]);
+
+                        RWData rwd;
+                        rwd.stride = BYTE;
+                        rwd.data_str = byte;
+                        if ( maddr < stack_base - stack_limit)
+                        {
+                            prepareTable.insert(make_pair(maddr, rwd));
+                        }
+                        else if (maddr >= stack_base - stack_limit && maddr < stack_base)
+                        {
+                            stackTable.insert(make_pair(maddr, rwd));        
+                        }
+                        else
+                        {
+                            cerr << "memory usage mismatch configuration" << endl;
+                            exit(-1);
+                        }
+                        ignoreList.insert(maddr);
                     }
-                    else if (maddr >= stack_base - stack_limit && maddr < stack_base)
-                    {
-                        stackTable.insert(make_pair(maddr, rwd));        
-                    }
-                    else
-                    {
-                        cerr << "memory usage mismatch configuration" << endl;
-                        exit(-1);
-                    }
-                    ignoreList.insert(maddr);
+                    maddr++;
                 }
-                maddr += stride;
             }
         }
         auto iit = instTable.find(cur_pc);
@@ -169,6 +239,11 @@ int main(int argc, char** argv)
             }
         }
     }
+    sort(exitBBs.begin(), exitBBs.end(), pcompare);
+    //for (auto it=exitBBs.begin(); it != exitBBs.end(); it++)
+    //{
+    //    cout << it->first << " " << (it->second)->first << " " << *((it->second)->second.startpcList.begin()) << endl;
+    //}
 
     ////output synthesis code////
     fstream fout;
@@ -177,6 +252,7 @@ int main(int argc, char** argv)
     Addr min_pc = instTable.begin()->first; //min inst pc
     //Addr max_pc = instTable.rbegin()->first;//max inst pc
     Addr sect_startpc = 0;
+    prepareTable.insert(stackTable.begin(), stackTable.end());
     auto it = prepareTable.begin();
     PcDataIter sect_startit = it;
     // output data sections
@@ -281,6 +357,13 @@ int main(int argc, char** argv)
         sect_startit = it;
         sect_startpc = it->first;
     }
+    //stack data
+    //fout << "stack_data:" ;
+    //for (auto it=stackTable.begin(); it != stackTable.end(); it++)
+    //{
+    //    fout << ".quad 0x" << hex << it->first << endl;
+    //    fout << ".quad " << it->second.data_str << endl;
+    //}
 
     //replace WaitTarget to nop and insert branch to console at the last bb
     for (auto wt_it = WTlist.begin(); wt_it != WTlist.end(); wt_it++)
@@ -292,41 +375,51 @@ int main(int argc, char** argv)
 
     Addr modified_bb_startpc = 0;
     Addr modified_bb_freq = 0;
-    auto bbm_it = bbMap.rbegin();
-    auto inst_it = instTable.find(bbm_it->first);
-    auto inst_next_it = inst_it;
-    advance(inst_next_it, 1);
-    while(bbm_it != bbMap.rend())
+    auto eit = exitBBs.begin();
+    PcStrIter inst_next_it;
+    for ( ;eit != exitBBs.end(); eit++)
     {
+        auto &bbm_it = eit->second;
+        if (bbm_it->second.startpcList.size() != 1)
+            continue;
+
+        auto inst_it = instTable.find(bbm_it->first);
+        inst_next_it = inst_it;
+        advance(inst_next_it, 1);
         if (inst_next_it != instTable.end())
         {
             if (inst_next_it->first - inst_it->first >= 8)
             {
-                modified_bb_startpc = *(bbm_it->second.startpcList.rbegin());
-                modified_bb_freq = bbm_it->second.freq;
+                modified_bb_startpc = *(bbm_it->second.startpcList.begin());
+                modified_bb_freq = eit->first;
                 break;
             }
         }
-        bbm_it++;
-        inst_it = instTable.find(bbm_it->first);
-        inst_next_it = inst_it;
-        advance(inst_next_it, 1);
+        else
+        {
+            Addr newpc = inst_it->first + 8;
+            auto p = instTable.insert(make_pair(newpc, "nop"));
+            assert(p.second);
+            inst_next_it = p.first;
+            modified_bb_startpc = *(bbm_it->second.startpcList.begin());
+            modified_bb_freq = eit->first;
+            break;
+        }
     }
-    if (bbm_it == bbMap.rend())
+    if (eit == exitBBs.end())
     {
-        cerr << "Weired program, synthesis failed" << endl;
+        cerr << "Error: too dense to synthesize" << endl;
         exit(-1);
     }
     string replaced;
     string replacer = "b end";
-    inst_it = instTable.find(modified_bb_startpc);
-    for (;inst_it != inst_next_it; inst_it++)
+    for (auto inst_it = instTable.find(modified_bb_startpc); inst_it != inst_next_it; inst_it++)
     {
         replaced = inst_it->second;
         inst_it->second = replacer;
         replacer = replaced;
     }
-    instTable.insert(make_pair(bbm_it->first+4, replacer));
+    instTable.insert(make_pair((eit->second)->first+4, replacer));
     
     //text sections
     auto iit = instTable.begin();
@@ -358,12 +451,6 @@ int main(int argc, char** argv)
 
     //data used for controling store here
     fout << ".section .misc, \"aw\"" << endl;
-    fout << "stack_data:" ;
-    for (auto it=stackTable.begin(); it != stackTable.end(); it++)
-    {
-        fout << ".quad 0x" << hex << it->first << endl;
-        fout << ".quad " << it->second.data_str << endl;
-    }
     Addr regs_cnt = 0;
     for (auto it=regs.begin(); it != regs.end(); it++)
     {
@@ -371,7 +458,13 @@ int main(int argc, char** argv)
         regs_cnt++;
     }
     fout << "max: .quad 0x" << hex << modified_bb_freq+1 << endl;
-    fout << "cnt: .quad " << hex << 0 << endl;
+    fout << "cnt: .quad 0" << endl;
+    fout << "hltoff: .quad 8" << endl;
+    for (auto hit = hdataList.begin(); hit != hdataList.end(); hit++)
+    {
+        fout << ".quad " << hex << hit->x0 << endl;
+        fout << ".quad " << hex << hit->ret_pc << endl;
+    }
     fout << endl;
 
     //console text
@@ -386,13 +479,13 @@ int main(int argc, char** argv)
     fout << ".global start" << endl;
     fout << "start:" << endl;
     //recover stack
-    fout << "ldr x0, =stack_data" << endl;
-    for( Addr i = 0; i < stackTable.size(); i++)
-    {
-        fout << "ldr x1, [x0], #8" << endl;
-        fout << "ldr x2, [x0], #8" << endl;
-        fout << "str x2, [x1]" << endl;
-    }
+    //fout << "ldr x0, =stack_data" << endl;
+    //for( Addr i = 0; i < stackTable.size(); i++)
+    //{
+    //    fout << "ldr x1, [x0], #8" << endl;
+    //    fout << "ldr x2, [x0], #8" << endl;
+    //    fout << "str x2, [x1]" << endl;
+    //}
     //recover register
     for( Addr i = 1; i < regs.size(); i++)
     {
@@ -414,6 +507,16 @@ int main(int argc, char** argv)
     fout << "ldr x0, [x0]" << endl;
 
     fout << "b L0x" << hex << start_pc << endl;
+    fout << "hltsim:" << endl;
+    fout << "ldr x0, =hltoff" << endl;
+    fout << "ldr x17, [x0]" << endl;
+    fout << "add x17, x17, #0x10" << endl;
+    fout << "str x17, [x0]" << endl;
+    fout << "sub x17, x17, #0x10" << endl;
+    fout << "add x17, x17, x0" << endl;
+    fout << "ldr x0, [x17], #8" << endl;
+    fout << "ldr x17, [x17]" << endl;
+    fout << "br x17" << endl;
     fout << "end: " << endl;
     fout << "stp x1, x2, [sp, #-0x10]" << endl;
     fout << "stp x3, x4, [sp, #-0x20]" << endl;
@@ -421,24 +524,14 @@ int main(int argc, char** argv)
     fout << "ldr x2, =cnt" << endl;
     fout << "ldr x3, [x1]" << endl;
     fout << "ldr x4, [x2]" << endl;
+    fout << "add x4, x4, #1" << endl;
     fout << "cmp x3, x4" << endl;
     fout << "beq exit" << endl;
-    fout << "add x4, x4, #1" << endl;
-    fout << "str x4, [x1]" << endl; 
+    fout << "str x4, [x2]" << endl; 
     fout << "ldp x3, x4, [sp, #-0x20]" << endl;
     fout << "ldp x1, x2, [sp, #-0x10]" << endl;
     fout << "b L0x" << hex << modified_bb_startpc+4 << endl;
     fout << "exit: " << endl;
-    //fout << "mov x7, #1" << endl;
-    //fout << "mov x0, #42" << endl;
-    //fout << "svc #0" << endl;
-    fout << "sub sp, sp, #0x10" << endl;
-    fout << "movz x1, #0x26" << endl;
-    fout << "movk x1, #0x2, lsl #16" << endl;
-    fout << "str x1, [sp]" << endl;
-    fout << "sxtw x0, w0" << endl;
-    fout << "str x0, [sp,#8]" << endl;
-    fout << "mov x1, sp" << endl;
     fout << "movz w0, #0x18" << endl;
     fout << "hlt #0xf000" << endl;
     fout << "b ." << endl;
@@ -473,6 +566,10 @@ void insertInstTable(map<Addr, string>& instTable, DetailTrace& dtrace, unordere
 {
     Addr cur_pc = dtrace.get_pc();
     string inst = dtrace.disassembly();
+    if (inst.find("hlt") != string::npos)
+    {
+        inst = "b hltsim";
+    }
     instTable.insert(make_pair(cur_pc, inst));
     if (dtrace.is_has_target())
     {
@@ -496,6 +593,7 @@ void printData(fstream& fout, PcDataIter begin, PcDataIter end)
         {
             printOneValue(fout, it1->second);
             DataStride stride = it1->second.stride;
+            assert(it2->first-it1->first >= stride);
             Addr delta = it2->first - it1->first - stride;
             switch (delta)
             {
@@ -510,13 +608,13 @@ void printData(fstream& fout, PcDataIter begin, PcDataIter end)
                     fout << ".byte 0" << endl;
                     break;
                 default:
-                    for (uint64_t i=0; i< delta/4; i++)
-                    {
-                        fout << ".word 0" << endl;
-                    }
                     for (short i=0; i< delta % 4; i++)
                     {
                         fout << ".byte 0" << endl;
+                    }
+                    for (uint64_t i=0; i< delta/4; i++)
+                    {
+                        fout << ".word 0" << endl;
                     }
                     break;
             }
@@ -595,13 +693,13 @@ void printCode(fstream& fout, PcStrIter begin, PcStrIter end)
                     fout << ".hword 0" << endl;
                     break;
                 default:
-                    for (uint64_t i =0; i < delta/4 ; i++)
-                    {
-                        fout << "nop" << endl; 
-                    }
                     for (uint64_t i=0; i < delta%4 ; i++)
                     {
                         fout << ".byte 0" << endl;
+                    }
+                    for (uint64_t i =0; i < delta/4 ; i++)
+                    {
+                        fout << "nop" << endl; 
                     }
                     break;
             }
