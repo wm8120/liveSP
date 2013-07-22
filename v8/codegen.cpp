@@ -25,7 +25,6 @@ bool pcompare(const ExitBBPair& first, const ExitBBPair& second)
 
 int main(int argc, char** argv)
 {
-    const Addr interval = 50000;
     //parse status.txt
     string oneline;
     fstream fcfg;
@@ -33,6 +32,7 @@ int main(int argc, char** argv)
     StrVec regs;
     Addr stack_base;
     Addr stack_limit;
+    Addr interval;
     while(getline(fcfg, oneline))
     {
         if(oneline.find("register") != string::npos)
@@ -53,6 +53,12 @@ int main(int argc, char** argv)
             stack_base = strtoull(oneline.substr(0, pos).c_str(), NULL, 16);
             stack_limit = strtoull(oneline.substr(pos+1).c_str(), NULL, 16);
         }
+        else if(oneline.find("interval") != string::npos)
+        {
+            getline(fcfg, oneline);
+            boost::trim(oneline);
+            interval = strtoull(oneline.c_str(), NULL, 10);
+        }
     }
     fcfg.close();
     
@@ -60,9 +66,6 @@ int main(int argc, char** argv)
     bool bb_simple=true;
     Addr start_pc=0;//the pc of first instruction in trace
     Addr cur_bb_startpc;
-    //Addr last_bb_start_pc=0;//the pc of first inst of last bb
-    //Addr last_bb_exit_pc=0;// the pc of last inst of last bb
-    //Addr last_bb_freq=0;// the frequency of last bb
     Addr first_write = 0xffffffffffffffff;
     set<Addr> ignoreList;
     map<Addr, RWData> prepareTable;
@@ -75,7 +78,7 @@ int main(int argc, char** argv)
 
     bool isHLT = false;
     HLTData hdata;
-    for(Addr i=0; getline(cin, oneline); i++)
+    for(Addr i=0; i<1.5*interval && getline(cin, oneline) ; i++)
     {
         DetailTrace dtrace(oneline);
         Addr cur_pc = dtrace.get_pc();
@@ -191,16 +194,38 @@ int main(int argc, char** argv)
             auto it = datas.begin();
             for (;it != datas.end(); it++)
             {
-                for (int i=0; i<stride; i++)
+                for (unsigned int i=0; i<stride; i++)
                 {
                     if (ignoreList.find(maddr) == ignoreList.end())
                     {
                         string byte = "0x";
                         string onedata(*it);
                         size_t len = onedata.length();
+#ifdef BIG
+                        if (stride == 8 || stride == 4)
+                        {
+                            byte.push_back(onedata[2+2*i]);
+                            byte.push_back(onedata[3+2*i]);
+                        }
+                        else if (stride == 2)
+                        {
+                            byte.push_back(onedata[len+2*i-4]);
+                            byte.push_back(onedata[len+2*i-3]);
+                        }
+                        else if (stride == 1)
+                        {
+                            byte.push_back(onedata[len-2]);
+                            byte.push_back(onedata[len-1]);
+                        }
+                        else
+                        {
+                            cerr << "Error: invalid stride!" << endl;
+                            exit(-1);
+                        }
+#else
                         byte.push_back(onedata[len-2-2*i]);
                         byte.push_back(onedata[len-1-2*i]);
-
+#endif
                         RWData rwd;
                         rwd.stride = BYTE;
                         rwd.data_str = byte;

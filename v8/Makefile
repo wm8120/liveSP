@@ -6,7 +6,11 @@ CFLAGS:=-std=c++11 -c -g $(LIBS) $(INCLUDES)
 SOURCES:=codegen.cpp trace.cpp detail_trace.cpp
 OBJS:=$(SOURCES:.cpp=.o)
 
-all: synth
+ifeq ($(big-endian), y)
+    CFLAGS+=-DBIG
+endif
+
+small: synth
 
 synth: $(OBJS)
 	$(CC) $(OBJS) $(LIBS) -o codegen
