@@ -677,7 +677,7 @@ MyCPU::tick()
                         inst_end_num++;
                     }
                     else if ( (numInst == inst_start_num && !curStaticInst->isControl() && cur_pc < 0xffff0000) || \
-                            (numInst > inst_start_num) )
+                            (numInst > inst_start_num && numInst <= inst_end_num + interval_num/2) )
                     {
                         if (curStaticInst->opClass() == Enums::MemRead && traceData->getAddrValid() && traceData->getDataStatus())
                         {
