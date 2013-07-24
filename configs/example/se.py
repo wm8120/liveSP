@@ -220,8 +220,12 @@ for i in xrange(np):
 
     if options.synthesize:
         system.cpu[i].synthesize = True
-        system.cpu[i].synthesize_start = options.synthesize_start
         system.cpu[i].synthesize_interval = options.synthesize_interval
+        if options.synthesize_start < options.synthesize_interval:
+            system.cpu[i].synthesize_start = options.synthesize_interval
+        else:
+            system.cpu[i].synthesize_start = options.synthesize_start
+
 
     if options.syscall_dump:
         system.cpu[i].syscall_dump = True
