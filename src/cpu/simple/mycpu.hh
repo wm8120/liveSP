@@ -58,7 +58,7 @@ typedef std::pair<Addr, Addr> BasicBlockRange;
 /** Overload hash function for BasicBlockRange type */
 __hash_namespace_begin
 template <>
-class hash<BasicBlockRange>
+struct hash<BasicBlockRange>
 {
   public:
     size_t operator()(const BasicBlockRange &bb) const {
@@ -275,7 +275,6 @@ class MyCPU : public BaseSimpleCPU
     /** @}
      *  End of data structures for SimPoints BBV generation
      */
-
 
   protected:
 

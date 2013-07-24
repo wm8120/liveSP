@@ -331,14 +331,12 @@ MyCPU::readMem(Addr addr, uint8_t * data,
         traceData->setAddr(addr);
     }
 
-    //The block size of our peer.
-    unsigned blockSize = dcachePort.peerBlockSize();
     //The size of the data we're trying to read.
     int fullSize = size;
 
     //The address of the second part of this access if it needs to be split
     //across a cache line boundary.
-    Addr secondAddr = roundDown(addr + size - 1, blockSize);
+    Addr secondAddr = roundDown(addr + size - 1, cacheLineSize());
 
     if (secondAddr > addr)
         size = secondAddr - addr;
@@ -419,14 +417,12 @@ MyCPU::writeMem(uint8_t *data, unsigned size,
         traceData->setAddr(addr);
     }
 
-    //The block size of our peer.
-    unsigned blockSize = dcachePort.peerBlockSize();
     //The size of the data we're trying to read.
     int fullSize = size;
 
     //The address of the second part of this access if it needs to be split
     //across a cache line boundary.
-    Addr secondAddr = roundDown(addr + size - 1, blockSize);
+    Addr secondAddr = roundDown(addr + size - 1, cacheLineSize());
 
     if(secondAddr > addr)
         size = secondAddr - addr;
@@ -935,8 +931,9 @@ MyCPU::tick()
                 instCnt++;
 
             // profile for SimPoints if enabled and macro inst is finished
-            if (simpoint && curStaticInst && (!curStaticInst->isMicroop() ||
-                                        curStaticInst->isLastMicroop())) {
+            if (simpoint && curStaticInst && (fault == NoFault) &&
+                    (!curStaticInst->isMicroop() ||
+                     curStaticInst->isLastMicroop())) {
                 profileSimPoint();
             }
 
@@ -1016,15 +1013,16 @@ MyCPU::profileSimPoint()
         // interval (intervalDrift) is greater than/equal to the interval size.
         if (intervalCount + intervalDrift >= intervalSize) {
             // summarize interval and display BBV info
-            std::map<uint64_t, uint64_t> counts;
+            std::vector<pair<uint64_t, uint64_t> > counts;
             for (auto map_itr = bbMap.begin(); map_itr != bbMap.end();
                     ++map_itr) {
                 BBInfo& info = map_itr->second;
                 if (info.count != 0) {
-                    counts[info.id] = info.count;
+                    counts.push_back(std::make_pair(info.id, info.count));
                     info.count = 0;
                 }
             }
+            std::sort(counts.begin(), counts.end());
 
             // Print output BBV info
             *simpointStream << "T";
