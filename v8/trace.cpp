@@ -30,6 +30,9 @@ void Trace::interpret_opcode(string s)
     boost::regex sys_exception("svc|hvc|smc|eret");
     if (boost::regex_search(s, sys_exception))
         sys_except = true;
+    boost::regex hlt_pattern("^hlt");
+    if (boost::regex_search(s, hlt_pattern))
+        hlt_exception = true;
 }
 
 bool Trace::is_control()
@@ -42,11 +45,17 @@ bool Trace::is_sys_exception()
     return sys_except;
 }
 
+bool Trace::is_hlt()
+{
+    return hlt_exception;
+}
+
 void Trace::init()
 {
     pc = 0;
     control_flow = false;
     sys_except = false;
+    hlt_exception = false;
 }
 
 Addr Trace::get_pc()
