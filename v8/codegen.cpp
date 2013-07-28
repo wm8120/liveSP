@@ -1,5 +1,6 @@
 #include "types.hpp"
 #include "detail_trace.hpp"
+#include "lstream.hpp"
 #include <fstream>
 #include <iostream>
 #include <unordered_set>
@@ -25,6 +26,14 @@ bool pcompare(const ExitBBPair& first, const ExitBBPair& second)
 
 int main(int argc, char** argv)
 {
+    if (argc != 2)
+    {
+        cout << "Usage: ./codegen [sp#]" << endl;
+        cout << "Example: get synthesis binary based on trace file ./intervals/10" << endl;
+        cout << "\t./codegen 10" << endl;
+    }
+    Addr sp_no = strtoull(argv[1], NULL, 10);
+
     //parse status.txt
     string oneline;
     fstream fcfg;
@@ -78,7 +87,8 @@ int main(int argc, char** argv)
 
     bool isHLT = false;
     HLTData hdata;
-    for(Addr i=0; i<1.5*interval && getline(cin, oneline) ; i++)
+    LStream lstream(sp_no, sp_no+1);
+    for(Addr i=0; i<1.5*interval && lstream.feedline(oneline) ; i++)
     {
         DetailTrace dtrace(oneline);
         Addr cur_pc = dtrace.get_pc();

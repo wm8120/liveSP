@@ -1,22 +1,31 @@
 include ../common.mk
 
 INCLUDES:=-I$(BOOST_HOME)/include
-LIBS:=-L$(BOOST_HOME)/lib -lboost_regex
+LIBS:=-L$(BOOST_HOME)/lib -lboost_regex -lboost_filesystem -lboost_system
 CFLAGS:=-std=c++11 -c -g $(LIBS) $(INCLUDES)
-SOURCES:=codegen.cpp trace.cpp detail_trace.cpp
+SOURCES:=codegen.cpp trace.cpp detail_trace.cpp lstream.cpp
 OBJS:=$(SOURCES:.cpp=.o)
 
 ifeq ($(big-endian), y)
     CFLAGS+=-DBIG
 endif
 
-small: synth
+all: synth bbv
+
+bbv: bbv.o trace.o lstream.o
+	$(CC) bbv.o trace.o lstream.o $(LIBS) -o bbv
+
+bbv.o: trace.cpp trace.hpp bbv.cpp
+	$(CC) $(CFLAGS) bbv.cpp
 
 synth: $(OBJS)
 	$(CC) $(OBJS) $(LIBS) -o codegen
 
 codegen.o: detail_trace.o codegen.cpp
 	$(CC) $(CFLAGS) codegen.cpp
+
+lstream.o: lstream.hpp lstream.cpp
+	$(CC) $(CFLAGS) lstream.cpp
 
 detail_trace.o: trace.o detail_trace.hpp detail_trace.cpp
 	$(CC) $(CFLAGS) detail_trace.cpp

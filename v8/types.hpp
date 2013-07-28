@@ -9,6 +9,7 @@
 #include <map>
 #include <set>
 #include <list>
+#include <istream>
 
 typedef std::uint64_t Addr;
 typedef std::pair<Addr, Addr> BasicBlockRange;
@@ -58,6 +59,7 @@ namespace std
                 return hash<Addr>()(bb.first + bb.second);
             }
     };
+    
 }
 
 #endif
