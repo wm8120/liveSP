@@ -1118,6 +1118,10 @@ inline void MyCPU::insertInstTable(Addr a)
         {
             sstr<<"WaitInst";
         }
+        else if (str.find("pldw") != string::npos)
+        {
+            sstr<<"WaitInst";
+        }
         else if (str.find("bfc") != string::npos)
         {
             sstr<<"WaitInst";

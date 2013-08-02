@@ -207,9 +207,9 @@ int main(int argc, char** argv)
             printData(synthf, start_it, vec_it);
             start_addr = vec_it -> first;
             start_it = vec_it;
-            if (unallocate_svgate && addr - past_addr > svc_size)
+            if (unallocate_svgate && addr - past_addr - 1 > svc_size)
             {
-                svgate_addr = past_addr + 4;
+                svgate_addr = past_addr + 1;
                 linkmap.insert(make_pair(svgate_addr, ".svgate"));
                 unallocate_svgate = false;
             }
