@@ -22,6 +22,7 @@ int main(int argc, char** argv)
     uint64_t stack_bottom = 0xbf000000;
     uint64_t stack_size = 0x00001000;
     uint64_t stack_top = stack_bottom - stack_size;
+    uint64_t space_start = 0x00008000;
     string system_cmd = "./arm-objdump -h " + string(argv[1]) + " > tmp_objdump";
     system(system_cmd.c_str());
     
@@ -114,6 +115,7 @@ int main(int argc, char** argv)
     lscript.open("linker.x", ios::out);
     map<uint64_t, string> linkmap;
     map<uint64_t, string> instMap;
+    UsedMem usedMem;
     stringstream sstr("");
 
     for(auto sh_it = secHeader.begin(); sh_it != secHeader.end(); sh_it++)
@@ -143,6 +145,7 @@ int main(int argc, char** argv)
                 uint64_t memaddr = (sh_it->dataVec.begin())->first;
                 linkmap.insert(make_pair(memaddr, sh_it -> name));
                 printData(synthf, sh_it->dataVec.begin(), sh_it->dataVec.end());
+                markUsedMem(usedMem, sh_it->dataVec.front().first, sh_it->dataVec.back().first);
             }
         }
     }
@@ -191,6 +194,7 @@ int main(int argc, char** argv)
     uint64_t past_addr;
     auto start_it = hpdata.begin();
     uint64_t start_addr = start_it->first;
+    
     for (auto vec_it = start_it; vec_it != hpdata.end(); vec_it++)
     {
         uint64_t addr = vec_it->first;
@@ -205,6 +209,7 @@ int main(int argc, char** argv)
             linkmap.insert(make_pair(start_addr, sstr.str()));
             synthf << ".section .heapdata" << hex << start_addr << ", \"aw\"" << endl;
             printData(synthf, start_it, vec_it);
+            markUsedMem(usedMem, start_it->first, past_addr);
             start_addr = vec_it -> first;
             start_it = vec_it;
             if (unallocate_svgate && addr - past_addr - 1 > svc_size)
@@ -226,6 +231,7 @@ int main(int argc, char** argv)
     linkmap.insert(make_pair(start_addr, sstr.str()));
     synthf << ".section .heapdata" << start_addr << ", \"aw\"" << endl;
     printData(synthf, start_it, hpdata.end());
+    markUsedMem(usedMem, start_it->first, past_addr);
     hpdata.clear();
 
     //register
@@ -426,6 +432,7 @@ int main(int argc, char** argv)
     // output text sections
     auto code_it = instMap.begin();
     uint64_t start_pc = code_it ->first;
+    uint64_t past_inst_addr = 0;
     for (auto map_it = instMap.begin(); map_it != instMap.end(); map_it++)
     {
         uint64_t addr = map_it -> first;
@@ -440,9 +447,11 @@ int main(int argc, char** argv)
             linkmap.insert(make_pair(start_pc, sstr.str()));
             synthf << ".section .text" << hex << start_pc << ", \"ax\"" << endl;
             printCode(synthf, code_it, map_it);
+            markUsedMem(usedMem, code_it->first, past_inst_addr);
             code_it = map_it;
             start_pc = map_it -> first;
         }
+        past_inst_addr = addr;
     }
     //startname.clear();
     sstr.str("");
@@ -450,6 +459,7 @@ int main(int argc, char** argv)
     linkmap.insert(make_pair(start_pc, sstr.str()));
     synthf << ".section .text" << hex << start_pc << ", \"ax\"" << endl;
     printCode(synthf, code_it, instMap.end());
+    markUsedMem(usedMem, code_it->first, past_inst_addr);
 
 
     //data used for controling store here
@@ -691,4 +701,12 @@ inline Stride_t getStride(const CodeIter &it)
         stride = WORD;
     }
     return stride;
+}
+
+void markUsedMem(UsedMem& usedMem, uint64_t start_addr, uint64_t end_addr)
+{
+    MemInfo minfo;
+    minfo.addr = start_addr;
+    minfo.size = end_addr - start_addr +1;
+    usedMem.push_back(minfo);
 }

@@ -25,3 +25,10 @@ struct BBInfo{
     uint64_t bb_start_pc;
     uint64_t freq;
 };
+
+struct MemInfo{
+    uint64_t addr;
+    uint64_t size;
+};
+typedef std::list<MemInfo> UsedMem;
+void markUsedMem(UsedMem& usedMem, uint64_t start_addr, uint64_t end_addr);
