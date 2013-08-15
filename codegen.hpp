@@ -30,5 +30,7 @@ struct MemInfo{
     uint64_t addr;
     uint64_t size;
 };
-typedef std::list<MemInfo> UsedMem;
+typedef std::vector<MemInfo> UsedMem;
 void markUsedMem(UsedMem& usedMem, uint64_t start_addr, uint64_t end_addr);
+bool mem_addr_compare(const MemInfo& info1, const MemInfo& info2);
+uint64_t findSpace(UsedMem& usedMem, uint64_t size);

@@ -460,14 +460,22 @@ int main(int argc, char** argv)
     synthf << ".section .text" << hex << start_pc << ", \"ax\"" << endl;
     printCode(synthf, code_it, instMap.end());
     markUsedMem(usedMem, code_it->first, past_inst_addr);
+    //mark [0, 8000) and [stack_top, stack_bottom) as used memory
+    markUsedMem(usedMem, 0, 0x7999);
+    markUsedMem(usedMem, stack_top, stack_bottom-1);
+    //sort UsedMem by start addr
+    sort(usedMem.begin(), usedMem.end(), mem_addr_compare);
+
 
 
     //data used for controling store here
+    const uint64_t size_misc = 8;
     synthf << ".section .misc, \"aw\"" << endl;
     synthf << "max: .word 0x" << hex << modified_bb_freq+1 << endl;
     synthf << "cnt: .word " << hex << 0 << endl;
 
     //recovery stack, register and branch to start
+    const uint64_t size_console = (28+5*stackData.size()+regVec.size()*2+sysInst.size())*4;
     synthf << ".section .console, \"ax\"" << endl;
     synthf << ".global start" << endl;
     synthf << "start: ";
@@ -531,6 +539,8 @@ int main(int argc, char** argv)
     synthf << "mov r0, #42" << endl;
     synthf << "svc #0" << endl;
 
+    linkmap.insert(make_pair(findSpace(usedMem, size_console), ".console"));
+    linkmap.insert(make_pair(findSpace(usedMem, size_misc), ".misc"));
     //linker script
     printLinker(lscript, linkmap, entry_pc);
 
@@ -709,4 +719,37 @@ void markUsedMem(UsedMem& usedMem, uint64_t start_addr, uint64_t end_addr)
     minfo.addr = start_addr;
     minfo.size = end_addr - start_addr +1;
     usedMem.push_back(minfo);
+}
+
+bool mem_addr_compare(const MemInfo& info1, const MemInfo& info2)
+{
+    return info1.addr < info2.addr;
+}
+
+uint64_t findSpace(UsedMem& usedMem, uint64_t size)
+{
+    assert (usedMem.size() > 1);
+    auto it1 = usedMem.begin();
+    auto it2 = it1+1;
+    bool find = false;
+    uint64_t free_space_start;
+    for (;it2 != usedMem.end(); it1++, it2++)
+    {
+        free_space_start = it1->addr + it1->size;
+        if ( (free_space_start < it2->addr) && (it2->addr - free_space_start >= size) )
+        {
+            find = true;
+            markUsedMem(usedMem, free_space_start, free_space_start+size-1);
+            break;
+        }
+    }
+    if (find)
+    {
+        return free_space_start;
+    }
+    else
+    {
+        cerr << "no space for such big size" << endl;   
+        exit(-1);
+    }
 }
