@@ -198,7 +198,7 @@ int main(int argc, char** argv)
     for (auto vec_it = start_it; vec_it != hpdata.end(); vec_it++)
     {
         uint64_t addr = vec_it->first;
-        if (addr - start_addr <= 0x1000)
+        if (addr - start_addr < 0x1000)
         {
             ;
         }
@@ -217,6 +217,7 @@ int main(int argc, char** argv)
                 svgate_addr = past_addr + 1;
                 linkmap.insert(make_pair(svgate_addr, ".svgate"));
                 unallocate_svgate = false;
+                markUsedMem(usedMem, svgate_addr, svgate_addr+svc_size-1);
             }
         }
         past_addr = addr;
@@ -436,9 +437,9 @@ int main(int argc, char** argv)
     for (auto map_it = instMap.begin(); map_it != instMap.end(); map_it++)
     {
         uint64_t addr = map_it -> first;
-        if (addr - start_pc <= 0x1000)
+        if (addr - start_pc < 0x1000)
         {
-            continue;
+            ;
         }
         else
         {
@@ -461,7 +462,7 @@ int main(int argc, char** argv)
     printCode(synthf, code_it, instMap.end());
     markUsedMem(usedMem, code_it->first, past_inst_addr);
     //mark [0, 8000) and [stack_top, stack_bottom) as used memory
-    markUsedMem(usedMem, 0, 0x7999);
+    markUsedMem(usedMem, 0, space_start-1);
     markUsedMem(usedMem, stack_top, stack_bottom-1);
     //sort UsedMem by start addr
     sort(usedMem.begin(), usedMem.end(), mem_addr_compare);
@@ -475,7 +476,7 @@ int main(int argc, char** argv)
     synthf << "cnt: .word " << hex << 0 << endl;
 
     //recovery stack, register and branch to start
-    const uint64_t size_console = (28+5*stackData.size()+regVec.size()*2+sysInst.size())*4;
+    const uint64_t size_console = (29+5*stackData.size()+regVec.size()*2+sysInst.size())*4;
     synthf << ".section .console, \"ax\"" << endl;
     synthf << ".global start" << endl;
     synthf << "start: ";
@@ -539,8 +540,8 @@ int main(int argc, char** argv)
     synthf << "mov r0, #42" << endl;
     synthf << "svc #0" << endl;
 
-    linkmap.insert(make_pair(findSpace(usedMem, size_console), ".console"));
     linkmap.insert(make_pair(findSpace(usedMem, size_misc), ".misc"));
+    linkmap.insert(make_pair(findSpace(usedMem, size_console), ".console"));
     //linker script
     printLinker(lscript, linkmap, entry_pc);
 
@@ -652,8 +653,8 @@ void printLinker(ofstream& lout, map<uint64_t, string>& lmap, uint64_t entry_pc)
     lout << "SECTIONS" << endl;
     lout << "{" << endl;
     lout << "\tENTRY(start)" << endl;
-    lout << "\t.misc : {*(.misc)}\n" << endl;
-    lout << "\t.console : {*(.console)}" << endl;
+    //lout << "\t.misc : {*(.misc)}\n" << endl;
+    //lout << "\t.console : {*(.console)}" << endl;
     for ( auto it = lmap.begin(); it != lmap.end(); it++)
     {
         lout << "\t. = 0x"<< hex << it->first << ";\n";
@@ -740,6 +741,7 @@ uint64_t findSpace(UsedMem& usedMem, uint64_t size)
         {
             find = true;
             markUsedMem(usedMem, free_space_start, free_space_start+size-1);
+            sort(usedMem.begin(), usedMem.end(), mem_addr_compare);
             break;
         }
     }

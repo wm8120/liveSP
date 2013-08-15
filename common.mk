@@ -1,2 +1,2 @@
-BOOST_HOME:=/opt/local
-CC:=clang++
+BOOST_HOME:=/home/wm/usr/boost_1_52_0
+CC:=g++
