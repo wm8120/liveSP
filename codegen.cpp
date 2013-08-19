@@ -477,7 +477,7 @@ int main(int argc, char** argv)
 
     //recovery stack, register and branch to start
     const uint64_t size_console = (29+5*stackData.size()+regVec.size()*2+sysInst.size())*4;
-    synthf << ".section .console, \"ax\"" << endl;
+    synthf << ".section .text, \"ax\"" << endl;
     synthf << ".global start" << endl;
     synthf << "start: ";
     for (auto it = stackData.begin(); it != stackData.end(); it++)
@@ -541,7 +541,7 @@ int main(int argc, char** argv)
     synthf << "svc #0" << endl;
 
     linkmap.insert(make_pair(findSpace(usedMem, size_misc), ".misc"));
-    linkmap.insert(make_pair(findSpace(usedMem, size_console), ".console"));
+    linkmap.insert(make_pair(findSpace(usedMem, size_console), ".text"));
     //linker script
     printLinker(lscript, linkmap, entry_pc);
 
