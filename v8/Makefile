@@ -10,7 +10,8 @@ ifeq ($(big-endian), y)
     CFLAGS+=-DBIG
 endif
 
-all: synth bbv
+all: synth
+utilities: split bbv
 
 bbv: bbv.o trace.o lstream.o
 	$(CC) bbv.o trace.o lstream.o $(LIBS) -o bbv
@@ -33,5 +34,13 @@ detail_trace.o: trace.o detail_trace.hpp detail_trace.cpp
 trace.o: trace.cpp trace.hpp types.hpp
 	$(CC) $(CFLAGS) trace.cpp 
 
+split: split.cpp
+	$(CC) $(CFLAGS) split.cpp -o split.o
+	$(CC) split.o -o split
+
+installv8: 
+	cp codegen ../../v8exps
+	cp split ../../v8exps
+
 clean:
-	rm *.o codegen
+	rm *.o codegen bbv split

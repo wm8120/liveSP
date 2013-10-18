@@ -23,7 +23,7 @@ int main(int argc, char** argv)
     uint64_t stack_size = 0x00001000;
     uint64_t stack_top = stack_bottom - stack_size;
     uint64_t space_start = 0x00008000;
-    string system_cmd = "./arm-objdump -h " + string(argv[1]) + " > tmp_objdump";
+    string system_cmd = "arm-none-linux-gnueabi-objdump -h " + string(argv[1]) + " > tmp_objdump";
     system(system_cmd.c_str());
     
     //section header info
@@ -288,7 +288,7 @@ int main(int argc, char** argv)
 
     if (!instWaitVec.empty())
     {
-        system_cmd = "./arm-objdump -S " + string(argv[1]) + " > tmp_disassembly";
+        system_cmd = "arm-none-linux-gnueabi-objdump -S " + string(argv[1]) + " > tmp_disassembly";
         system(system_cmd.c_str());
         ifstream dumpf; 
         dumpf.open("tmp_disassembly", ios::in);
@@ -356,8 +356,7 @@ int main(int argc, char** argv)
         exit(-1);
     }
 
-    map<uint64_t, BBInfo> bbAttrMap;
-    vector<pair<uint64_t, uint64_t> > freqVec;
+    vector<BBInfo> bbVec;
     while(getline(fbb, line))
     {
         boost::trim(line);
@@ -365,31 +364,48 @@ int main(int argc, char** argv)
         BBInfo bb;
         bb.bb_start_pc = strtoull(splitVec[1].c_str(), NULL, 16);
         bb.freq = strtoull(splitVec[2].c_str(), NULL, 16);
-        uint64_t pc = strtoull(splitVec[0].c_str(), NULL, 16);
-        bbAttrMap.insert(make_pair(pc, bb));
-        freqVec.push_back(make_pair(bb.freq, pc));
+        bb.sequence = strtoull(splitVec[3].c_str(), NULL, 16);
+        bb.bb_end_pc = strtoull(splitVec[0].c_str(), NULL, 16);
+        bbVec.push_back(bb);
     }
     splitVec.clear();
-    sort(freqVec.begin(), freqVec.end());
+    sort(bbVec.begin(), bbVec.end(), bb_compare_p1);
+    sort_phase2(bbVec);
+    ofstream debugfile;
+    debugfile.open("debugfile.log", ios::out);
+    for (auto bv_it=bbVec.begin(); bv_it != bbVec.end(); bv_it++)
+    {
+        debugfile << hex << bv_it->bb_end_pc << " " << bv_it->bb_start_pc << " " << bv_it->freq << " " << bv_it->sequence << endl;
+    }
+    debugfile.close();
 
     uint64_t modified_bb_start;
     uint64_t modified_bb_exit;
     uint64_t modified_bb_freq;
     uint64_t modified_bb_next;
-    auto fv_it = freqVec.begin();
-    for (; fv_it != freqVec.end(); fv_it++)
+    bool replace_nop=false;
+    auto bv_it = bbVec.begin();
+    for (; bv_it != bbVec.end(); bv_it++)
     {
-        auto bm_it = bbAttrMap.find(fv_it->second);
-        auto in_it = instMap.find(bm_it->first);
+        auto in_it = instMap.find(bv_it->bb_end_pc);
         auto in_next_it = in_it;
         advance(in_next_it, 1);
         if (in_next_it != instMap.end())
         {
             if (in_next_it->first - in_it->first >= 8)
             {
-                modified_bb_start = bm_it->second.bb_start_pc;
+                modified_bb_start = bv_it->bb_start_pc;
                 modified_bb_exit = in_it->first;
-                modified_bb_freq = bm_it->second.freq;
+                modified_bb_freq = bv_it->freq;
+                modified_bb_next = in_next_it->first;
+                break;
+            }
+            else if (in_next_it->first - in_it->first == 4 && in_next_it->second.compare("nop") == 0)
+            {
+                replace_nop = true;
+                modified_bb_start = bv_it->bb_start_pc;
+                modified_bb_exit = in_it->first;
+                modified_bb_freq = bv_it->freq;
                 modified_bb_next = in_next_it->first;
                 break;
             }
@@ -399,14 +415,14 @@ int main(int argc, char** argv)
             auto p = instMap.insert(make_pair(in_it->first+8, "nop"));
             assert(p.second);
             in_next_it = p.first;
-            modified_bb_start = bm_it->second.bb_start_pc;
+            modified_bb_start = bv_it->bb_start_pc;
             modified_bb_exit = in_it->first;
-            modified_bb_freq = bm_it->second.freq;
+            modified_bb_freq = bv_it->freq;
             modified_bb_next = in_next_it->first;
             break;
         }
     }
-    if (fv_it == freqVec.end())
+    if (bv_it == bbVec.end())
     {
         cerr << "The code layout too dense to synthesize." << endl;
         ofstream debugfile;
@@ -427,7 +443,16 @@ int main(int argc, char** argv)
         in_it->second = rpler;
         rpler = rplee;
     }
-    instMap.insert(make_pair(modified_bb_exit+4, rpler));
+    if (replace_nop)
+    {
+        auto it = instMap.find(modified_bb_next);
+        assert(it != instMap.end());
+        it->second = rpler;
+    }
+    else
+    {
+        instMap.insert(make_pair(modified_bb_exit+4, rpler));
+    }
 
 
     // output text sections
@@ -754,4 +779,38 @@ uint64_t findSpace(UsedMem& usedMem, uint64_t size)
         cerr << "no space for such big size" << endl;   
         exit(-1);
     }
+}
+
+bool bb_compare_p1(const BBInfo& bb1, const BBInfo& bb2)
+{
+    return bb1.sequence < bb2.sequence;
+}
+
+bool bb_compare_p2(const BBInfo& bb1, const BBInfo& bb2)
+{
+    if (bb1.freq < bb2.freq)
+    {
+        return true;
+    }
+    else if (bb1.freq == bb2.freq)
+    {
+        return bb1.sequence < bb2.sequence;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+void sort_phase2(vector<BBInfo>& bbVec)
+{
+    auto it=bbVec.begin();
+    for (; it != bbVec.end(); it++)
+    {
+        if (it->freq == 0)
+        {
+            break;
+        }
+    }
+    sort(bbVec.begin(), it, bb_compare_p2);
 }

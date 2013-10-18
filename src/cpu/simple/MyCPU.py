@@ -68,6 +68,7 @@ class MyCPU(BaseSimpleCPU):
     synthesize = Param.Bool(False, "Synthesize workload")
     synthesize_start = Param.UInt64(1, "Synthesis start instruction")
     synthesize_interval = Param.UInt64(10000000, "Synthesis window size")
+    synthesize_factor = Param.UInt64(1, "Synthesis window size factor")
     synthesize_file = Param.String("synth.tf", "Synthesis code file")
     bb_freq_file = Param.String("synth.bb", "Basic Block Frequency file")
     svc_reg_file = Param.String("synth.re", "Post-SVC register status file")

@@ -118,6 +118,8 @@ MyCPU::MyCPU(MyCPUParams *p)
       inst_start_num(p->synthesize_start),
       inst_end_num(p->synthesize_start+p->synthesize_interval-1),
       interval_num(p->synthesize_interval),
+      factor(p->synthesize_factor),
+      bb_seq(1),
       synthStream(NULL),
       bbFreqStream(NULL),
       svcStream(NULL),
@@ -133,6 +135,8 @@ MyCPU::MyCPU(MyCPUParams *p)
       currentBBV(0, 0),
       currentBBVInstCount(0)
 {
+    outrange = factor*interval_num/2;
+
     _status = Idle;
 
     if (simpoint) {
@@ -673,7 +677,7 @@ MyCPU::tick()
                         inst_end_num++;
                     }
                     else if ( (numInst == inst_start_num && !curStaticInst->isControl() && cur_pc < 0xffff0000) || \
-                            (numInst > inst_start_num && numInst <= inst_end_num + interval_num/2) )
+                            (numInst > inst_start_num && numInst <= inst_end_num + outrange) )
                     {
                         if (curStaticInst->opClass() == Enums::MemRead && traceData->getAddrValid() && traceData->getDataStatus())
                         {
@@ -741,7 +745,7 @@ MyCPU::tick()
                                 start_pc = cur_pc;
                                 *debugStream << numInst << endl;
                                 *debugStream << numOp << endl;
-                                *debugStream << inst;
+                                *debugStream << inst << endl;
                             }
 
                             if (curStaticInst->disassemble(cur_pc).find("svc") != string::npos)
@@ -763,10 +767,10 @@ MyCPU::tick()
                                     bb_simple = false;
                                 }
 
+                                bb_start = true;
+
                                 if (numInst <= inst_end_num)
                                 {
-                                    bb_start = true;
-
                                     auto freq_itr = freqTable.find(cur_pc);
                                     if ( freq_itr != freqTable.end() )
                                     {
@@ -779,6 +783,7 @@ MyCPU::tick()
                                         bb.freq=1;
                                         bb.bbStartSet.insert(bb_start_pc);
                                         bb.showup=false;
+                                        bb.sequence=0;
                                         if (bb_simple)
                                         {
                                             bb.simple = true;
@@ -795,9 +800,10 @@ MyCPU::tick()
                                     Addr cur_pc = thread->instAddr();
                                     string inst = curStaticInst->disassemble(cur_pc);
                                     auto itr = freqTable.find(cur_pc);
-                                    if ( itr != freqTable.end())
+                                    if ( itr != freqTable.end() && itr->second.showup == false)
                                     {
                                         itr->second.showup = true;
+                                        itr->second.sequence = bb_seq++;
                                     }
                                     else
                                     {
@@ -808,6 +814,7 @@ MyCPU::tick()
                                             bb.bbStartSet.insert(bb_start_pc);
                                             bb.showup=true;
                                             bb.simple=true;
+                                            bb.sequence=bb_seq++;
                                             freqTable.insert(make_pair(cur_pc, bb));
                                         }
                                     }
@@ -859,7 +866,7 @@ MyCPU::tick()
                             }
                         }// < 0xffff0000
                     }
-                    else if (numInst > inst_end_num + interval_num/2)
+                    else if (numInst > inst_end_num + outrange)
                     {
                         //recover memory
                         *synthStream<<"memory:";
@@ -905,9 +912,26 @@ MyCPU::tick()
                             unordered_set<Addr>& set = bb.bbStartSet;
                             if (set.size() == 1 && bb.simple && bb.showup && *(set.begin()) != it->first)
                             {
-                                *bbFreqStream << hex << it->first << " " << hex << *(set.begin()) << " " << bb.freq << endl;
+                                *bbFreqStream << hex << it->first << " " << hex << *(set.begin()) << " " << bb.freq << " " << bb.sequence << endl;
                             }
                         }
+
+                        /* debug use
+                        for (auto it = freqTable.begin(); it != freqTable.end(); it++)
+                        {
+                            BBAttr& bb = it->second;
+                            unordered_set<Addr>& set = bb.bbStartSet;
+                            *debugStream << hex << it->first <<" start: ";
+                            for (auto bit = set.begin(); bit!=set.end(); bit++)
+                            {
+                                *debugStream << hex << *bit << " ";
+                            }
+                            *debugStream << "freq=" << hex << bb.freq << " " \
+                                        << "showup=" << bb.showup << " " \
+                                        << "simple=" << bb.simple << " " \
+                                        << "sequ=" << bb.sequence << endl;
+                        }
+                        */
 
                         Event* evnt = new SimLoopExitEvent("synthesis finished", 0);
                         schedule(evnt, curTick());

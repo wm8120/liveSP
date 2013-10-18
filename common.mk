@@ -1,2 +1,4 @@
-BOOST_HOME:=/home/wm/usr/boost_1_52_0
+BOOST_HOME:=/home/wmeng
 CC:=g++
+INSTALL:=../exps
+GEM5:=../gem5

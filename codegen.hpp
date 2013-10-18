@@ -23,7 +23,9 @@ inline Stride_t getStride(const CodeIter &it);
 
 struct BBInfo{
     uint64_t bb_start_pc;
+    uint64_t bb_end_pc;
     uint64_t freq;
+    uint64_t sequence;
 };
 
 struct MemInfo{
@@ -34,3 +36,6 @@ typedef std::vector<MemInfo> UsedMem;
 void markUsedMem(UsedMem& usedMem, uint64_t start_addr, uint64_t end_addr);
 bool mem_addr_compare(const MemInfo& info1, const MemInfo& info2);
 uint64_t findSpace(UsedMem& usedMem, uint64_t size);
+bool bb_compare_p1(const BBInfo& bb1, const BBInfo& bb2);
+bool bb_compare_p2(const BBInfo& bb1, const BBInfo& bb2);
+void sort_phase2(std::vector<BBInfo>& bbVec);

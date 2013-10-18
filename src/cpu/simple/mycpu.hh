@@ -198,7 +198,10 @@ class MyCPU : public BaseSimpleCPU
     bool bb_simple;
     uint64_t inst_start_num;
     uint64_t inst_end_num;
+    uint64_t outrange;
     uint64_t interval_num;
+    uint64_t factor; //it's used to extend search range of exiting bb
+    Addr bb_seq;
     //specified uint32_t for ARMv7 registers
     uint32_t regs[16];
     Addr start_pc;
@@ -217,6 +220,7 @@ class MyCPU : public BaseSimpleCPU
         Addr freq;
         bool showup;
         bool simple;
+        Addr sequence;
     };
     m5::hash_map<Addr, BBAttr> freqTable;
     std::ostream *synthStream;

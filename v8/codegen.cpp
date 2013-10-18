@@ -31,6 +31,7 @@ int main(int argc, char** argv)
         cout << "Usage: ./codegen [sp#]" << endl;
         cout << "Example: get synthesis binary based on trace file ./intervals/10" << endl;
         cout << "\t./codegen 10" << endl;
+        exit(1);
     }
     Addr sp_no = strtoull(argv[1], NULL, 10);
 
@@ -184,14 +185,16 @@ int main(int argc, char** argv)
                         {
                             prepareTable.insert(make_pair(maddr, rwd));
                         }
-                        else if (maddr >= stack_base - stack_limit && maddr < stack_base)
+                        else if (maddr >= stack_base - stack_limit && maddr <= stack_base)
                         {
                             stackTable.insert(make_pair(maddr, rwd));        
                         }
                         else
                         {
-                            cerr << "memory usage mismatch configuration" << endl;
-                            exit(-1);
+                            cerr << "memory usage mismatch configuration:" << endl;
+                            cerr << "stack: 0x" << hex << stack_base-stack_limit << " ~ 0x" << hex << stack_base << endl;
+                            cerr << "current memory address: 0x" << hex << maddr << endl;
+                            exit(2);
                         }
                         ignoreList.insert(maddr);
                     }
@@ -230,7 +233,7 @@ int main(int argc, char** argv)
                         else
                         {
                             cerr << "Error: invalid stride!" << endl;
-                            exit(-1);
+                            exit(4);
                         }
 #else
                         byte.push_back(onedata[len-2-2*i]);
@@ -243,14 +246,16 @@ int main(int argc, char** argv)
                         {
                             prepareTable.insert(make_pair(maddr, rwd));
                         }
-                        else if (maddr >= stack_base - stack_limit && maddr < stack_base)
+                        else if (maddr >= stack_base - stack_limit && maddr <= stack_base)
                         {
                             stackTable.insert(make_pair(maddr, rwd));        
                         }
                         else
                         {
-                            cerr << "memory usage mismatch configuration" << endl;
-                            exit(-1);
+                            cerr << "memory usage mismatch configuration:" << endl;
+                            cerr << "stack: 0x" << hex << stack_base-stack_limit << " ~ 0x" << hex << stack_base << endl;
+                            cerr << "current memory address: 0x" << hex << maddr << endl;
+                            exit(3);
                         }
                         ignoreList.insert(maddr);
                     }
@@ -352,8 +357,8 @@ int main(int argc, char** argv)
                     dir = ".quad";
                     break;
                 default:
-                    cerr << "non-valid data in memory" << endl;
-                    exit(-1);
+                    cerr << "unrecognized memory access stride" << endl;
+                    exit(5);
             }
             instTable.insert(make_pair(pc, dir+" "+it->second.data_str));
         }
@@ -444,7 +449,7 @@ int main(int argc, char** argv)
     if (eit == exitBBs.end())
     {
         cerr << "Error: too dense to synthesize" << endl;
-        exit(-1);
+        exit(7);
     }
     string replaced;
     string replacer = "b end";
@@ -678,7 +683,7 @@ void printOneValue(fstream& fout, RWData& data)
             break;
         default:
             cerr << "non-valid data in memory" << endl;
-            exit(-1);
+            exit(6);
     }
 }
 
